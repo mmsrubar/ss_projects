@@ -1,0 +1,53 @@
+Grammar
+
+    0 $accept: rules $end
+
+    1 rules: %empty
+    2      | NUM
+
+
+Terminals, with rules where they appear
+
+$end (0) 0
+error (256)
+NUM (258) 2
+
+
+Nonterminals, with rules where they appear
+
+$accept (4)
+    on left: 0
+rules (5)
+    on left: 1 2, on right: 0
+
+
+State 0
+
+    0 $accept: . rules $end
+
+    NUM  shift, and go to state 1
+
+    $default  reduce using rule 1 (rules)
+
+    rules  go to state 2
+
+
+State 1
+
+    2 rules: NUM .
+
+    $default  reduce using rule 2 (rules)
+
+
+State 2
+
+    0 $accept: rules . $end
+
+    $end  shift, and go to state 3
+
+
+State 3
+
+    0 $accept: rules $end .
+
+    $default  accept

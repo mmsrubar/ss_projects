@@ -1,0 +1,191 @@
+Grammar
+
+    0 $accept: rules $end
+
+    1 rules: %empty
+    2      | rule
+
+    3 rule: NUM ACTION PROTOCOL FROM IP TO IP port rules
+
+    4 port: %empty
+    5     | SRC_PORT NUM
+    6     | DST_PORT NUM
+    7     | SRC_PORT NUM DST_PORT NUM
+
+
+Terminals, with rules where they appear
+
+$end (0) 0
+error (256)
+NUM (258) 3 5 6 7
+ACTION (259) 3
+PROTOCOL (260) 3
+FROM (261) 3
+TO (262) 3
+SRC_PORT (263) 5 7
+DST_PORT (264) 6 7
+IP (265) 3
+
+
+Nonterminals, with rules where they appear
+
+$accept (11)
+    on left: 0
+rules (12)
+    on left: 1 2, on right: 0 3
+rule (13)
+    on left: 3, on right: 2
+port (14)
+    on left: 4 5 6 7, on right: 3
+
+
+State 0
+
+    0 $accept: . rules $end
+
+    NUM  shift, and go to state 1
+
+    $default  reduce using rule 1 (rules)
+
+    rules  go to state 2
+    rule   go to state 3
+
+
+State 1
+
+    3 rule: NUM . ACTION PROTOCOL FROM IP TO IP port rules
+
+    ACTION  shift, and go to state 4
+
+
+State 2
+
+    0 $accept: rules . $end
+
+    $end  shift, and go to state 5
+
+
+State 3
+
+    2 rules: rule .
+
+    $default  reduce using rule 2 (rules)
+
+
+State 4
+
+    3 rule: NUM ACTION . PROTOCOL FROM IP TO IP port rules
+
+    PROTOCOL  shift, and go to state 6
+
+
+State 5
+
+    0 $accept: rules $end .
+
+    $default  accept
+
+
+State 6
+
+    3 rule: NUM ACTION PROTOCOL . FROM IP TO IP port rules
+
+    FROM  shift, and go to state 7
+
+
+State 7
+
+    3 rule: NUM ACTION PROTOCOL FROM . IP TO IP port rules
+
+    IP  shift, and go to state 8
+
+
+State 8
+
+    3 rule: NUM ACTION PROTOCOL FROM IP . TO IP port rules
+
+    TO  shift, and go to state 9
+
+
+State 9
+
+    3 rule: NUM ACTION PROTOCOL FROM IP TO . IP port rules
+
+    IP  shift, and go to state 10
+
+
+State 10
+
+    3 rule: NUM ACTION PROTOCOL FROM IP TO IP . port rules
+
+    SRC_PORT  shift, and go to state 11
+    DST_PORT  shift, and go to state 12
+
+    $default  reduce using rule 4 (port)
+
+    port  go to state 13
+
+
+State 11
+
+    5 port: SRC_PORT . NUM
+    7     | SRC_PORT . NUM DST_PORT NUM
+
+    NUM  shift, and go to state 14
+
+
+State 12
+
+    6 port: DST_PORT . NUM
+
+    NUM  shift, and go to state 15
+
+
+State 13
+
+    3 rule: NUM ACTION PROTOCOL FROM IP TO IP port . rules
+
+    NUM  shift, and go to state 1
+
+    $default  reduce using rule 1 (rules)
+
+    rules  go to state 16
+    rule   go to state 3
+
+
+State 14
+
+    5 port: SRC_PORT NUM .
+    7     | SRC_PORT NUM . DST_PORT NUM
+
+    DST_PORT  shift, and go to state 17
+
+    $default  reduce using rule 5 (port)
+
+
+State 15
+
+    6 port: DST_PORT NUM .
+
+    $default  reduce using rule 6 (port)
+
+
+State 16
+
+    3 rule: NUM ACTION PROTOCOL FROM IP TO IP port rules .
+
+    $default  reduce using rule 3 (rule)
+
+
+State 17
+
+    7 port: SRC_PORT NUM DST_PORT . NUM
+
+    NUM  shift, and go to state 18
+
+
+State 18
+
+    7 port: SRC_PORT NUM DST_PORT NUM .
+
+    $default  reduce using rule 7 (port)
