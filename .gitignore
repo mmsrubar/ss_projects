@@ -1,0 +1,5 @@
+*.swp
+*.swo
+*.o
+*.o.cmd
+*.ko.cmd
