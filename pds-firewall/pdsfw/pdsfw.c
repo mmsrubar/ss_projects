@@ -11,13 +11,14 @@
 #include <linux/netfilter_ipv4.h>
  
 #define PROCF_NAME "pdsfw_xsruba03"
-#define PROCF_MAX_SIZE  1024
+//#define PROCF_MAX_SIZE  1024
+#define PROCF_MAX_SIZE  25
 
 #define proto_ver(x) (x == UDP) ? "udp" : ((x==ICMP) ? "icmp" : "tcp")
 #define action_str(x) (x == ALLOW) ? "allow" : "deny"
 #define in_out_str(x) (x == true) ? "INCOMMING" : "OUTGOING"
 
-
+#define IP        0   //FIXME
 #define ICMP        1
 #define UDP         17
 #define TCP         6
@@ -62,6 +63,23 @@ struct packet_info {
 static struct proc_dir_entry *mf_proc_file;
 unsigned long procf_buffer_pos;
 char *procf_buffer;
+
+unsigned int str_to_uint(char *str)
+{
+    unsigned int uint = 0;    
+    int i = 0;
+
+    if (str == NULL) {
+        return 0;
+    } 
+
+    while (str[i] != '\0') {
+        uint = uint*10 + (str[i]-'0');
+        ++i;
+    }
+
+    return uint;
+}
 
 /* Convert the string IP to byte array, e.g.: * from "131.132.162.25" to 
  * [131][132][162][25]
@@ -234,6 +252,42 @@ void add_token_to_buf(unsigned long *procf_buffer_pos, char token[], char *e)
   (*procf_buffer_pos)++;
 }
 
+int add_rule(struct fw_rule *policy_list,
+             unsigned int num,
+             unsigned int action,
+             unsigned int protocol,
+             const char *src_ip,
+             const char *dest_ip,
+             bool src_ip_any,
+             bool dest_ip_any,
+             unsigned int src_port,
+             unsigned int dest_port)
+{
+  unsigned int tmp;
+  struct fw_rule *new = kmalloc(sizeof(*new), GFP_KERNEL);
+  if (new == NULL) {
+    return 1;
+  }
+
+  new->num = num;
+  if (!(new->src_ip_any = src_ip_any))     /* set the value first */
+    new->src_ip = ((tmp=ip_str_to_hl(src_ip))==0) ? 0 : ntohl(tmp);
+  if (!(new->dest_ip_any = dest_ip_any)) {  /* set the value first */
+    new->dest_ip = ((tmp=ip_str_to_hl(dest_ip))==0) ? 0 : ntohl(tmp);
+  }
+  new->src_port = src_port;
+  new->dest_port = dest_port;
+  new->protocol = protocol;  /* 1: tcp, 2: udp, 3: icmp, 4: ip */
+  new->action = action;
+
+  INIT_LIST_HEAD(&(new->list));
+  list_add_tail(&(new->list), &(policy_list->list));
+
+  print_rule("ADD RULE", new);
+
+  return 0;
+}
+
 
 static ssize_t procRead(struct file *fp, char *buffer, size_t len, 
                         loff_t *offset)
@@ -265,6 +319,10 @@ static ssize_t procRead(struct file *fp, char *buffer, size_t len,
       strcpy(token, action_str(rule->action));
       add_token_to_buf(&procf_buffer_pos, token, " ");
 
+      /* protocol */
+      strcpy(token, proto_ver(rule->protocol));
+      add_token_to_buf(&procf_buffer_pos, token, " ");
+
       /* src ip */
       if (rule->src_ip_any) {
         strcpy(token, "*");
@@ -288,11 +346,8 @@ static ssize_t procRead(struct file *fp, char *buffer, size_t len,
 
       /* dest port */
       sprintf(token, "%u", rule->dest_port);
-      add_token_to_buf(&procf_buffer_pos, token, " ");
-
-      /* protocol */
-      strcpy(token, proto_ver(rule->protocol));
       add_token_to_buf(&procf_buffer_pos, token, "\n");
+
     }
 
     memcpy(buffer, procf_buffer, procf_buffer_pos);
@@ -303,12 +358,184 @@ static ssize_t procRead(struct file *fp, char *buffer, size_t len,
   return ret;
 }
  
-static ssize_t procWrite(struct file *file, const char *buffer, 
-                         size_t count, loff_t *off)
+static unsigned long procfs_buffer_size = 0;
+static char procfs_buffer[PROCF_MAX_SIZE];
+
+enum fw_rule_fields {NUM, ACTION, PROTOCOL, FROM, SRC_IP, TO, DEST_IP, SRC_PORT, DEST_PORT};
+ 
+/* If the file is not big enough then this func is called more than once. For
+ * example if the file is 32B long and a user write 64B to the file then this
+ * function would be called twice.
+ */
+static ssize_t procWrite(struct file *file, const char *buffer, size_t count, loff_t *off)
 {
-   printk(KERN_INFO "procf_write is called.\n");
-   /*read the write content into the storage buffer*/
-   return count;
+  static char token[16];
+  static int j = 0;
+  static enum fw_rule_fields type = NUM;
+  static bool rule_complete = false;
+
+  int read_again = false;
+  int i;
+
+  static unsigned int num = 0;
+  static bool src_ip_any = false;          /* true: source ip is set to any */
+  static bool dest_ip_any = false;         /* true: source ip is set to any */
+  static char src_ip[15];
+  static char dest_ip[15];
+  static unsigned int src_port;
+  static unsigned int dest_port;
+  static int protocol;  /* 1: tcp, 2: udp, 3: icmp, 4: ip */
+  static int action;    /* 1: allow, 2: deny */
+
+  printk(KERN_INFO "procf_write is called.\n");
+
+  procfs_buffer_size = count;
+  if (procfs_buffer_size > PROCF_MAX_SIZE) {
+    procfs_buffer_size = PROCF_MAX_SIZE;
+    read_again = true;
+    printk(KERN_INFO "Data from user are bigger then my buffer (buf_len=%dB)\n", PROCF_MAX_SIZE);
+  }
+
+  /* write data to the buffer */
+  if (copy_from_user(procfs_buffer, buffer, procfs_buffer_size)) {
+    return -EFAULT;
+  }
+
+  printk(KERN_INFO "buf: %s\n", procfs_buffer);
+
+  /* delete command have following format: "d number" */
+  if (procfs_buffer[0] == 'd') {
+    i = 2;  /* start with first number char */
+    num = 0;
+
+    while (i < procfs_buffer_size) {
+      if (procfs_buffer[i] == '\n') continue;   /* skip new line */
+
+      printk(KERN_INFO "procfs_buffer[%i]: %c\n", i, procfs_buffer[i]);
+      num = num*10 + (procfs_buffer[i]-'0');
+      ++i;
+    }
+
+    printk(KERN_INFO "Delete rule with id: %u\n", num);
+    num = 0;
+
+    if (read_again)
+      printk(KERN_INFO "ERROR: Buffer was big enough for delete command!\n");
+
+    return procfs_buffer_size;
+  }
+
+  i = 0; 
+  while (i < procfs_buffer_size) {
+
+    /* FIXME: use strstr() and then copy chars to found white space would be
+     * probably more effective ... */
+
+    if (procfs_buffer[i] == '\n' || (i+1 == procfs_buffer_size && read_again == false)) {
+      /* now we are sure we have one entire rule */
+      rule_complete = true;
+      /* and end the current token */
+      token[j] = '\0';
+      j = 0;
+    } else if (procfs_buffer[i] == ' ') {
+      token[j] = '\0';  /* the token is complete */
+      j = 0;            /* start writing to the begining the next time */
+    } else {
+      /* non whitechar */
+      //printk(KERN_INFO "token[%u]: %c\n", j, procfs_buffer[i]);
+      token[j] = procfs_buffer[i];
+      j++;
+      i++;
+      continue;
+    }
+
+    printk(KERN_INFO "token: %s\n", token);
+    switch (type) {
+      case NUM:
+        printk(KERN_INFO "NUM <- %s\n", token);
+        num = str_to_uint(token);
+        break;
+      case ACTION:
+        printk(KERN_INFO "ACTION <- %s\n", token);
+        if (strcmp(token, "deny") == 0) {
+          action = DENY;
+        } else {
+          action = ALLOW;
+        }
+        break;
+      case PROTOCOL:
+        printk(KERN_INFO "PROTOCOL <- %s\n", token);
+        if (strcmp(token, "tcp") == 0) {
+          protocol = TCP;
+        } else if (strcmp(token, "udp") == 0) {
+          protocol = UDP;
+        } else if (strcmp(token, "icmp") == 0) {
+          protocol = ICMP;
+        } else {
+          protocol = IP;
+        }
+        break;
+      case FROM:
+        printk(KERN_INFO "FROM <- %s\n", token);
+        break;
+      case SRC_IP:
+        printk(KERN_INFO "SRC_IP <- %s\n", token);
+        if (strcmp(token, "any") == 0) {
+          src_ip_any = true;
+        } else {
+          src_ip_any = false;
+          strncpy(src_ip, token, strlen(token));
+        }
+        break;
+      case TO:
+        printk(KERN_INFO "TO <- %s\n", token);
+        break;
+      case DEST_IP:
+        printk(KERN_INFO "DEST_IP <- %s\n", token);
+        if (strcmp(token, "any") == 0) {
+          dest_ip_any = true;
+        } else {
+          dest_ip_any = false;
+          strncpy(dest_ip, token, strlen(token));
+        }
+        break;
+      case SRC_PORT:
+        printk(KERN_INFO "SRC_PORT <- %s\n", token);
+        src_port = str_to_uint(token);
+        break;
+      case DEST_PORT:
+        printk(KERN_INFO "DEST_PORT <- %s\n", token);
+        dest_port = str_to_uint(token);
+        break;
+    }
+
+    if (rule_complete) {
+      printk(KERN_INFO "RULE READING DONE!\n");
+      printk(KERN_INFO "RULE: %d %s %s from %s to %s src-port %u dest-port %u\n", 
+                        num, action_str(action), proto_ver(protocol), src_ip, 
+                        dest_ip, src_port, dest_port);
+
+      add_rule(&policy_list, num, action, protocol, src_ip, dest_ip, src_ip_any, 
+               dest_ip_any, src_port, dest_port);
+
+      rule_complete = false;
+      type = 0;   /* reset token type -> start with NUM again */
+
+      num = 0;
+      src_ip_any = false;          /* true: source ip is set to any */
+      dest_ip_any = false;         /* true: source ip is set to any */
+      src_port = 0;
+      dest_port = 0;
+      protocol = 0;  /* 1: tcp, 2: udp, 3: icmp, 4: ip */
+      action = 0;    /* 1: allow, 2: deny */
+    } else {
+      type++;
+    }
+
+    i++;
+  }
+
+  return procfs_buffer_size;
 }
 
 int procOpen(struct inode *inode, struct file *fp) {
@@ -321,42 +548,6 @@ int procClose(struct inode *inode, struct file *fp) {
         return 0;
 }
 
-int add_rule(struct fw_rule *policy_list,
-             unsigned int num,
-             unsigned int action,
-             unsigned int protocol,
-             const char *src_ip,
-             const char *dest_ip,
-             bool src_ip_any,
-             bool dest_ip_any,
-             unsigned int src_port,
-             unsigned int dest_port)
-{
-  unsigned int tmp;
-  struct fw_rule *new = kmalloc(sizeof(*new), GFP_KERNEL);
-  if (new == NULL) {
-    return 1;
-  }
-
-  new->num = num;
-  if (!(new->src_ip_any = src_ip_any))     /* set the value first */
-    new->src_ip = ((tmp=ip_str_to_hl(src_ip))==0) ? 0 : ntohl(tmp);
-  if (!(new->dest_ip_any = dest_ip_any)) {  /* set the value first */
-    new->dest_ip = ((tmp=ip_str_to_hl(dest_ip))==0) ? 0 : ntohl(tmp);
-    printk(KERN_INFO "dest_ip: %d\n", new->dest_ip);
-  }
-  new->src_port = src_port;
-  new->dest_port = dest_port;
-  new->protocol = protocol;  /* 1: tcp, 2: udp, 3: icmp, 4: ip */
-  new->action = action;
-
-  INIT_LIST_HEAD(&(new->list));
-  list_add_tail(&(new->list), &(policy_list->list));
-
-  print_rule("ADD RULE", new);
-
-  return 0;
-}
 
 /* Get packet information and return it in packet struct 
  * @packet:   struct for packet information
@@ -437,6 +628,7 @@ int init_module()
   add_rule(&policy_list, 20, DENY, ICMP, "192.168.0.1", NULL, false, true, 0, 0);
 
   procf_buffer = (char *) vmalloc(PROCF_MAX_SIZE);
+
 
   /* inicialize operations for my proc file */
   procFops.open = procOpen;
