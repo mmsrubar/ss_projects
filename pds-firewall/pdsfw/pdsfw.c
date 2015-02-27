@@ -363,6 +363,27 @@ static char procfs_buffer[PROCF_MAX_SIZE];
 
 enum fw_rule_fields {NUM, ACTION, PROTOCOL, FROM, SRC_IP, TO, DEST_IP, SRC_PORT, DEST_PORT};
  
+void delete_rule(int num)
+{
+  struct fw_rule *rule;
+  struct list_head *p, *q;
+
+  //printk(KERN_INFO "Deleting rule number: %d\n", num);
+
+  list_for_each_safe(p, q, &policy_list.list) {
+    rule = list_entry(p, struct fw_rule, list);
+
+    if (rule->num == num) {
+      list_del(p);
+      kfree(rule);
+      printk(KERN_INFO "Rule with id=%d deleted\n", num);
+      return;
+    }
+  }
+
+  printk(KERN_INFO "No such rule with id=%d found\n", num);
+}
+
 /* If the file is not big enough then this func is called more than once. For
  * example if the file is 32B long and a user write 64B to the file then this
  * function would be called twice.
@@ -380,8 +401,8 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
   static unsigned int num = 0;
   static bool src_ip_any = false;          /* true: source ip is set to any */
   static bool dest_ip_any = false;         /* true: source ip is set to any */
-  static char src_ip[15];
-  static char dest_ip[15];
+  static char src_ip[15] = {[14] = '\0'};
+  static char dest_ip[15] = {[14] = '\0'};
   static unsigned int src_port;
   static unsigned int dest_port;
   static int protocol;  /* 1: tcp, 2: udp, 3: icmp, 4: ip */
@@ -401,27 +422,30 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
     return -EFAULT;
   }
 
-  printk(KERN_INFO "buf: %s\n", procfs_buffer);
+  printk(KERN_INFO "buf(%i): %s\n", procfs_buffer_size, procfs_buffer);
 
   /* delete command have following format: "d number" */
   if (procfs_buffer[0] == 'd') {
-    i = 2;  /* start with first number char */
-    num = 0;
+    printk(KERN_INFO "Delete cmd received\n");
 
+    i = 2;
     while (i < procfs_buffer_size) {
-      if (procfs_buffer[i] == '\n') continue;   /* skip new line */
 
-      printk(KERN_INFO "procfs_buffer[%i]: %c\n", i, procfs_buffer[i]);
+      /* skip new line char */
+      if (procfs_buffer[i] == '\n') {
+        i++;
+        continue;
+      }
+
       num = num*10 + (procfs_buffer[i]-'0');
-      ++i;
+      i++;
     }
-
-    printk(KERN_INFO "Delete rule with id: %u\n", num);
-    num = 0;
 
     if (read_again)
       printk(KERN_INFO "ERROR: Buffer was big enough for delete command!\n");
 
+    //printk(KERN_INFO "calling delete_rule(%d)\n", num);
+    delete_rule(num);
     return procfs_buffer_size;
   }
 
