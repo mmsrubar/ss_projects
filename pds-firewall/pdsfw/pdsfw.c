@@ -1,8 +1,8 @@
+#include <asm/uaccess.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/proc_fs.h>
 #include <linux/list.h>
-#include <asm/uaccess.h>
 #include <linux/udp.h>
 #include <linux/tcp.h>
 #include <linux/skbuff.h>
@@ -25,7 +25,6 @@
 #define ALLOW       1
 #define DENY        2
 
-
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("PDS firewall");
 MODULE_AUTHOR("Michal Srubar, xsruba03@stud.fit.vutbr.cz");
@@ -33,6 +32,19 @@ MODULE_AUTHOR("Michal Srubar, xsruba03@stud.fit.vutbr.cz");
 static struct nf_hook_ops nfho_in;
 static struct nf_hook_ops nfho_out;
 
+enum fw_rule_fields {
+  NUM = 0,
+  ACTION, 
+  PROTOCOL, 
+  FROM, 
+  SRC_IP, 
+  TO, 
+  DEST_IP, 
+  SRC_PORT_STR, 
+  SRC_PORT, 
+  DEST_PORT_STR,
+  DEST_PORT,
+};
 
 static struct fw_rule policy_list;
 
@@ -63,6 +75,19 @@ struct packet_info {
 static struct proc_dir_entry *mf_proc_file;
 unsigned long procf_buffer_pos;
 char *procf_buffer;
+
+void ip_hl_to_str(unsigned int ip, char *ip_str)
+{
+    /*convert hl to byte array first*/
+    unsigned char ip_array[4];
+    memset(ip_array, 0, 4);
+    ip_array[0] = (ip_array[0] | (ip >> 24));
+    ip_array[1] = (ip_array[1] | (ip >> 16));
+    ip_array[2] = (ip_array[2] | (ip >> 8));
+    ip_array[3] = (ip_array[3] | ip);
+
+    sprintf(ip_str, "%u.%u.%u.%u", ip_array[0], ip_array[1], ip_array[2], ip_array[3]);
+}
 
 unsigned int str_to_uint(char *str)
 {
@@ -166,6 +191,7 @@ static int classificate(struct packet_info *packet, bool in)
 
     }
 
+    printk(KERN_INFO "dest ip: packet(%d) == rule(%d)\n", packet->dest_ip, rule->dest_ip);
     if (rule->dest_ip_any) {
       /* rule doesn't specify IPv4 address */
       printk(KERN_INFO "dest IP: any\n");
@@ -216,7 +242,7 @@ static int classificate(struct packet_info *packet, bool in)
 
     /* the packet successfully passed the through the rule, do the action */
     if (rule->action == DENY) {
-      printk(KERN_INFO "Packet DROP (rule :%d)\n", rule->num);
+      printk(KERN_INFO "Packet DROPED (rule :%d)\n", rule->num);
       return DENY;
     }
   }
@@ -231,18 +257,6 @@ void print_rule(const char *msg, struct fw_rule *rule)
   printk(KERN_INFO "%s: %u %s %s from %pI4 (%s) to %pI4 (%s) src-port %u dest-port %u\n", msg, rule->num, action_str(rule->action), proto_ver(rule->protocol), &rule->src_ip, (rule->src_ip_any)?"any":"", &rule->dest_ip, (rule->dest_ip_any)?"any":"", rule->src_port, rule->dest_port);
 }
 
-void ip_hl_to_str(unsigned int ip, char *ip_str)
-{
-    /*convert hl to byte array first*/
-    unsigned char ip_array[4];
-    memset(ip_array, 0, 4);
-    ip_array[0] = (ip_array[0] | (ip >> 24));
-    ip_array[1] = (ip_array[1] | (ip >> 16));
-    ip_array[2] = (ip_array[2] | (ip >> 8));
-    ip_array[3] = (ip_array[3] | ip);
-
-    sprintf(ip_str, "%u.%u.%u.%u", ip_array[0], ip_array[1], ip_array[2], ip_array[3]);
-}
 
 void add_token_to_buf(unsigned long *procf_buffer_pos, char token[], char *e)
 {
@@ -250,6 +264,29 @@ void add_token_to_buf(unsigned long *procf_buffer_pos, char token[], char *e)
   *procf_buffer_pos += strlen(token);
   memcpy(procf_buffer + *procf_buffer_pos, e, 1);  /* add extra space */
   (*procf_buffer_pos)++;
+}
+
+/* Check if the rule with num id is already in list or not.
+ * @num - id of rule we are looking for
+ *
+ * returns: 0 - the id DOES NOT exist yet
+ *          1 - the rule with id already exists
+ */
+int check_id_rule(int num)
+{
+  struct fw_rule *rule;
+  struct list_head *p, *q;
+
+  list_for_each_safe(p, q, &(policy_list.list)) {
+    rule = list_entry(p, struct fw_rule, list);
+
+    if (rule->num == num) {
+      printk(KERN_INFO "Rule with id=%d already exists\n", num);
+      return 1;
+    }
+  }
+
+  return 0;
 }
 
 int add_rule(struct fw_rule *policy_list,
@@ -264,10 +301,15 @@ int add_rule(struct fw_rule *policy_list,
              unsigned int dest_port)
 {
   unsigned int tmp;
+
+
   struct fw_rule *new = kmalloc(sizeof(*new), GFP_KERNEL);
   if (new == NULL) {
     return 1;
   }
+
+  if (check_id_rule(num) == 1)
+    return 1;
 
   new->num = num;
   if (!(new->src_ip_any = src_ip_any))     /* set the value first */
@@ -288,6 +330,26 @@ int add_rule(struct fw_rule *policy_list,
   return 0;
 }
 
+void delete_rule(int num)
+{
+  struct fw_rule *rule;
+  struct list_head *p, *q;
+
+  //printk(KERN_INFO "Deleting rule number: %d\n", num);
+
+  list_for_each_safe(p, q, &policy_list.list) {
+    rule = list_entry(p, struct fw_rule, list);
+
+    if (rule->num == num) {
+      list_del(p);
+      kfree(rule);
+      printk(KERN_INFO "Rule with id=%d deleted\n", num);
+      return;
+    }
+  }
+
+  printk(KERN_INFO "No such rule with id=%d found\n", num);
+}
 
 static ssize_t procRead(struct file *fp, char *buffer, size_t len, 
                         loff_t *offset)
@@ -313,41 +375,46 @@ static ssize_t procRead(struct file *fp, char *buffer, size_t len,
 
       /* number */
       sprintf(token, "%u", rule->num);
-      add_token_to_buf(&procf_buffer_pos, token, " ");
+      add_token_to_buf(&procf_buffer_pos, token, "\t");
 
       /* action */
       strcpy(token, action_str(rule->action));
-      add_token_to_buf(&procf_buffer_pos, token, " ");
+      add_token_to_buf(&procf_buffer_pos, token, "\t");
 
       /* protocol */
       strcpy(token, proto_ver(rule->protocol));
-      add_token_to_buf(&procf_buffer_pos, token, " ");
+      add_token_to_buf(&procf_buffer_pos, token, "\t");
 
       /* src ip */
       if (rule->src_ip_any) {
-        strcpy(token, "*");
+        strcpy(token, "*\t");
       } else {
         ip_hl_to_str(rule->src_ip, token);
       } 
-      add_token_to_buf(&procf_buffer_pos, token, " ");
-
-      /* src port */
-      sprintf(token, "%u", rule->src_port);
-      add_token_to_buf(&procf_buffer_pos, token, " ");
+      add_token_to_buf(&procf_buffer_pos, token, "\t");
 
       /* dest ip */
       if (rule->dest_ip_any) {
-        strcpy(token, "*");
+        strcpy(token, "*\t");
       } else {
         ip_hl_to_str(rule->dest_ip, token);
       } 
       memcpy(procf_buffer + procf_buffer_pos, token, strlen(token));
-      add_token_to_buf(&procf_buffer_pos, token, " ");
+      add_token_to_buf(&procf_buffer_pos, token, "\t");
 
-      /* dest port */
-      sprintf(token, "%u", rule->dest_port);
-      add_token_to_buf(&procf_buffer_pos, token, "\n");
+      if (rule->src_port) {
+        /* src port */
+        sprintf(token, "%u", rule->src_port);
+        add_token_to_buf(&procf_buffer_pos, token, "\t");
+      }
 
+      if (rule->dest_port) {
+        /* dest port */
+        sprintf(token, "%u", rule->dest_port);
+        add_token_to_buf(&procf_buffer_pos, token, "");
+      }
+
+      add_token_to_buf(&procf_buffer_pos, "", "\n");
     }
 
     memcpy(buffer, procf_buffer, procf_buffer_pos);
@@ -361,28 +428,7 @@ static ssize_t procRead(struct file *fp, char *buffer, size_t len,
 static unsigned long procfs_buffer_size = 0;
 static char procfs_buffer[PROCF_MAX_SIZE];
 
-enum fw_rule_fields {NUM, ACTION, PROTOCOL, FROM, SRC_IP, TO, DEST_IP, SRC_PORT, DEST_PORT};
  
-void delete_rule(int num)
-{
-  struct fw_rule *rule;
-  struct list_head *p, *q;
-
-  //printk(KERN_INFO "Deleting rule number: %d\n", num);
-
-  list_for_each_safe(p, q, &policy_list.list) {
-    rule = list_entry(p, struct fw_rule, list);
-
-    if (rule->num == num) {
-      list_del(p);
-      kfree(rule);
-      printk(KERN_INFO "Rule with id=%d deleted\n", num);
-      return;
-    }
-  }
-
-  printk(KERN_INFO "No such rule with id=%d found\n", num);
-}
 
 /* If the file is not big enough then this func is called more than once. For
  * example if the file is 32B long and a user write 64B to the file then this
@@ -523,9 +569,15 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
           strncpy(dest_ip, token, strlen(token));
         }
         break;
+      case SRC_PORT_STR:
+        printk(KERN_INFO "SRC_PORT <- %s\n", token);
+        break;
       case SRC_PORT:
         printk(KERN_INFO "SRC_PORT <- %s\n", token);
         src_port = str_to_uint(token);
+        break;
+      case DEST_PORT_STR:
+        printk(KERN_INFO "DEST_PORT <- %s\n", token);
         break;
       case DEST_PORT:
         printk(KERN_INFO "DEST_PORT <- %s\n", token);
@@ -535,9 +587,6 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
 
     if (rule_complete) {
       printk(KERN_INFO "RULE READING DONE!\n");
-      printk(KERN_INFO "RULE: %d %s %s from %s to %s src-port %u dest-port %u\n", 
-                        num, action_str(action), proto_ver(protocol), src_ip, 
-                        dest_ip, src_port, dest_port);
 
       add_rule(&policy_list, num, action, protocol, src_ip, dest_ip, src_ip_any, 
                dest_ip_any, src_port, dest_port);
