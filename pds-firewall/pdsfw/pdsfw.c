@@ -259,7 +259,10 @@ void check_rule_id(int id)
   printk(KERN_INFO "check_rule_id():\n");
 
   list_for_each_entry(rule, &policy_list.list, list) {
-    printk(KERN_INFO "id: %d\n", rule->num);
+    if (rule != NULL)
+      printk(KERN_INFO "id: %d\n", rule->num);
+    else
+      printk(KERN_INFO "no rules\n");
   }
 }
 
