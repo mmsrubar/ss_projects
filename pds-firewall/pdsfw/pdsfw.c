@@ -1,3 +1,10 @@
+/*
+ * Project:     Simple Firewall (PDS)
+ * Author:      Michal Srubar, xsruba03@stud.fit.vutbr.cz
+ * Date:        Sun Mar  1 00:31:18 CET 2015
+ * Description: 
+ */
+
 /* FIXME change num to id .. */
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -249,21 +256,42 @@ void add_token_to_buf(unsigned long *procf_buffer_pos, char token[], char *e)
 {
   memcpy(procf_buffer + *procf_buffer_pos, token, strlen(token));
   *procf_buffer_pos += strlen(token);
-  memcpy(procf_buffer + *procf_buffer_pos, e, 1);  /* add extra space */
+  memcpy(procf_buffer + *procf_buffer_pos, e, strlen(e));  /* add extra space */
   (*procf_buffer_pos)++;
 }
 
-void check_rule_id(int id)
+struct fw_rule *get_item_by_id(int id)
 {
   struct fw_rule *rule;
-  printk(KERN_INFO "check_rule_id():\n");
 
   list_for_each_entry(rule, &policy_list.list, list) {
-    if (rule != NULL)
-      printk(KERN_INFO "id: %d\n", rule->num);
-    else
-      printk(KERN_INFO "no rules\n");
+    printk(KERN_INFO "check rule-id(%d) with id(%d)\n", rule->num, id);
+    if (rule->num == id) {
+      printk(KERN_INFO "Rule with id=%d already exist\n", rule->num);
+      return rule;
+    }
   }
+
+  return NULL;
+}
+
+void delete_rule(int id)
+{
+  struct list_head *p, *q;
+  struct fw_rule *rule;
+
+  list_for_each_safe(p, q, &policy_list.list) {
+
+    rule = list_entry(p, struct fw_rule, list);
+    if (rule->num == id) {
+      list_del(p);
+      kfree(rule);
+      printk(KERN_INFO "Rule with id=%d removed\n", id);
+      return;
+    }
+  }
+
+  printk(KERN_INFO "There is no such rule with id=%d\n", id);
 }
 
 int add_rule(struct fw_rule *policy_list,
@@ -280,6 +308,10 @@ int add_rule(struct fw_rule *policy_list,
   unsigned int tmp;
   struct fw_rule *new = kmalloc(sizeof(*new), GFP_KERNEL);
   if (new == NULL) {
+    return 1;
+  }
+
+  if (get_item_by_id(num) != NULL) {
     return 1;
   }
 
@@ -310,11 +342,12 @@ static ssize_t procRead(struct file *fp, char *buffer, size_t len,
   int ret;
   struct fw_rule *rule;
   char token[20];
+  int i;
 
   printk(KERN_INFO "procf_read (/proc/%s) called \n", PROCF_NAME);
 
   if (finished) {
-    printk(KERN_INFO "eof is 1, nothing to read\n");
+    printk(KERN_INFO "finished is 1, nothing to read\n");
     finished = 0;
     return 0;
   } else {
@@ -332,10 +365,12 @@ static ssize_t procRead(struct file *fp, char *buffer, size_t len,
       /* action */
       strcpy(token, action_str(rule->action));
       add_token_to_buf(&procf_buffer_pos, token, " ");
-
-      /* protocol */
-      strcpy(token, proto_ver(rule->protocol));
-      add_token_to_buf(&procf_buffer_pos, token, " ");
+      if (rule->action == ALLOW) {
+        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
+      } else {
+        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
+        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
+      }
 
       /* src ip */
       if (rule->src_ip_any) {
@@ -344,10 +379,20 @@ static ssize_t procRead(struct file *fp, char *buffer, size_t len,
         ip_hl_to_str(rule->src_ip, token);
       } 
       add_token_to_buf(&procf_buffer_pos, token, " ");
+      for (i = 0; i < 15 - strlen(token); i++) {
+        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
+      }
 
       /* src port */
-      sprintf(token, "%u", rule->src_port);
+      if (rule->src_port == 0) {
+        sprintf(token, "*");
+      } else {
+        sprintf(token, "%u", rule->src_port);
+      }
       add_token_to_buf(&procf_buffer_pos, token, " ");
+      for (i = 0; i < 7 - strlen(token); i++) {
+        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
+      }
 
       /* dest ip */
       if (rule->dest_ip_any) {
@@ -355,13 +400,25 @@ static ssize_t procRead(struct file *fp, char *buffer, size_t len,
       } else {
         ip_hl_to_str(rule->dest_ip, token);
       } 
-      memcpy(procf_buffer + procf_buffer_pos, token, strlen(token));
       add_token_to_buf(&procf_buffer_pos, token, " ");
+      for (i = 0; i < 15 - strlen(token); i++) {
+        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
+      }
 
       /* dest port */
-      sprintf(token, "%u", rule->dest_port);
-      add_token_to_buf(&procf_buffer_pos, token, "\n");
+      if (rule->dest_port == 0) {
+        sprintf(token, "*");
+      } else {
+        sprintf(token, "%u", rule->dest_port);
+      }
+      add_token_to_buf(&procf_buffer_pos, token, " ");
+      for (i = 0; i < 7 - strlen(token); i++) {
+        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
+      }
 
+      /* protocol */
+      strcpy(token, proto_ver(rule->protocol));
+      add_token_to_buf(&procf_buffer_pos, token, "\n");
     }
 
     memcpy(buffer, procf_buffer, procf_buffer_pos);
@@ -419,7 +476,7 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
 
   /* delete command have following format: "d number" */
   if (strncmp(procfs_buffer, "delete", strlen("delete")) == 0) {
-    i = 2;  /* start with first number char */
+    i = 7;  /* start with first number char */
     num = 0;
 
     while (i < procfs_buffer_size) {
@@ -429,6 +486,7 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
     }
 
     printk(KERN_INFO "Delete rule with id: %u\n", num);
+    delete_rule(num);
     num = 0;
 
     if (read_again)
@@ -651,12 +709,11 @@ int init_module()
   static struct file_operations procFops;
   printk(KERN_INFO "inicializing pds kernel firewall module\n");
 
-  check_rule_id(10);
-
   /* inicialize the list of firewall rules */
   INIT_LIST_HEAD(&(policy_list.list));
   add_rule(&policy_list, 10, DENY, ICMP, "127.0.0.1", NULL, false, true, 0, 0);
   add_rule(&policy_list, 20, DENY, ICMP, "192.168.0.1", NULL, false, true, 0, 0);
+  add_rule(&policy_list, 30, ALLOW, ICMP, "192.168.123.123", "192.168.123.123", false, false, 65535, 65535);
 
   procf_buffer = (char *) vmalloc(PROCF_MAX_SIZE);
 
@@ -703,7 +760,7 @@ void cleanup_module()
   remove_proc_entry(PROCF_NAME, NULL);
 
   printk(KERN_INFO "freeing list of firewall rules\n");
-    list_for_each_safe(p, q, &policy_list.list) {
+  list_for_each_safe(p, q, &policy_list.list) {
     rule = list_entry(p, struct fw_rule, list);
     list_del(p);
     kfree(rule);
