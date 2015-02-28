@@ -1,0 +1,1 @@
+10 allow tcp from 147.229.1.1 to any src-port 88 dst-port 80
