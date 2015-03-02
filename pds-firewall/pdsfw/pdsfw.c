@@ -294,7 +294,7 @@ void delete_rule(int id)
   printk(KERN_INFO "There is no such rule with id=%d\n", id);
 }
 
-int add_rule(struct fw_rule *policy_list,
+int add_rule(
              unsigned int num,
              unsigned int action,
              unsigned int protocol,
@@ -306,12 +306,35 @@ int add_rule(struct fw_rule *policy_list,
              unsigned int dest_port)
 {
   unsigned int tmp;
-  struct fw_rule *new = kmalloc(sizeof(*new), GFP_KERNEL);
-  if (new == NULL) {
-    return 1;
+  struct fw_rule *rule;
+  struct fw_rule *new;
+  struct list_head *pos;
+  bool ftail = false;
+
+  /* We want to keed the IDs in the list ordered. Find a rule with a first
+   * higher id then the rule we want to add have. If the rule with id already
+   * exist then fail.*/
+  list_for_each(pos, &policy_list.list) {
+    rule = list_entry(pos, struct fw_rule, list);
+    if (rule->num > num) {
+      /* put new rule in front of the pos */
+      break;
+    } else if (rule->num == num) {
+      printk(KERN_INFO "Rule with id=%d already exist\n", rule->num);
+      return 1;
+    } else {
+      /* adding a rule with highest ID -> has to be added to the end of the list
+       * */
+      ftail = true;
+    }
   }
 
-  if (get_item_by_id(num) != NULL) {
+  /* correct the pos pointer if the list is empty */
+  if (pos == policy_list.list.next)
+    pos = &policy_list.list;
+
+  new = kmalloc(sizeof(*new), GFP_KERNEL);
+  if (new == NULL) {
     return 1;
   }
 
@@ -326,10 +349,11 @@ int add_rule(struct fw_rule *policy_list,
   new->protocol = protocol;  /* 1: tcp, 2: udp, 3: icmp, 4: ip */
   new->action = action;
 
-  INIT_LIST_HEAD(&(new->list));
-  list_add_tail(&(new->list), &(policy_list->list));
-
-  print_rule("ADD RULE", new);
+  if (ftail) {
+    list_add_tail(&(new->list), pos);
+  } else {
+    list_add(&(new->list), pos);
+  }
 
   return 0;
 }
@@ -361,6 +385,9 @@ static ssize_t procRead(struct file *fp, char *buffer, size_t len,
       /* number */
       sprintf(token, "%u", rule->num);
       add_token_to_buf(&procf_buffer_pos, token, " ");
+      for (i = 0; i < 5 - strlen(token); i++) {
+        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
+      }
 
       /* action */
       strcpy(token, action_str(rule->action));
@@ -599,7 +626,7 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
                         num, action_str(action), proto_ver(protocol), src_ip, 
                         dest_ip, src_port, dest_port);
 
-      add_rule(&policy_list, num, action, protocol, src_ip, dest_ip, src_ip_any, 
+      add_rule(num, action, protocol, src_ip, dest_ip, src_ip_any, 
                dest_ip_any, src_port, dest_port);
 
       rule_complete = false;
@@ -711,9 +738,13 @@ int init_module()
 
   /* inicialize the list of firewall rules */
   INIT_LIST_HEAD(&(policy_list.list));
-  add_rule(&policy_list, 10, DENY, ICMP, "127.0.0.1", NULL, false, true, 0, 0);
-  add_rule(&policy_list, 20, DENY, ICMP, "192.168.0.1", NULL, false, true, 0, 0);
-  add_rule(&policy_list, 30, ALLOW, ICMP, "192.168.123.123", "192.168.123.123", false, false, 65535, 65535);
+  add_rule(20, DENY, ICMP, "192.168.0.1", NULL, false, true, 0, 0);
+  add_rule(1, DENY, ICMP, "127.0.0.1", NULL, false, true, 0, 0);
+  /*
+  add_rule(20, DENY, ICMP, "192.168.0.1", NULL, false, true, 0, 0);
+  add_rule(30, ALLOW, ICMP, "192.168.123.123", "192.168.123.123", false, false, 65535, 65535);
+  add_rule(15, ALLOW, TCP, NULL, "192.168.0.1", true, false, 0, 0);
+  */
 
   procf_buffer = (char *) vmalloc(PROCF_MAX_SIZE);
 
