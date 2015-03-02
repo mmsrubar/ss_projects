@@ -21,7 +21,13 @@
 %}
 
 DIGIT    [0-9]
-ID    ^{DIGIT}+
+DIGIT2   [0-9][0-9]
+DIGIT3   [0-9][0-9][0-9]
+DIGIT4   [0-9][0-9][0-9][0-9]
+DIGIT5   [0-9][0-9][0-9][0-9][0-9]
+DIGIT6   [0-9][0-9][0-9][0-9][0-9][0-9]
+
+ID    ^([1-9]|{DIGIT2}|{DIGIT3}|{DIGIT4}|{DIGIT5}|{DIGIT6})
 IPV4  ((({DIGIT}{1,2})|(1{DIGIT}{2})|(2[0-4]{DIGIT})|(25[0-5]))\.){3}(({DIGIT}{1,2})|(1{DIGIT}{2})|(2[0-4]{DIGIT})|(25[0-5]))
 IP    {IPV4}|any|ANY
 A     allow|deny|ALLOW|DENY
@@ -32,20 +38,7 @@ SP    src-port|SRC-PORT
 DP    dst-port|DST-PORT
 PORT  ([0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])
 
-
-
 %%
-{ID}    printf("ID(%s)", yytext);   return ID;
-{IP}    printf("IP(%s)", yytext);   return IP;
-{A}     printf("A(%s)", yytext);    return ACTION;
-{P}     printf("P(%s)", yytext);    return PROTOCOL;
-{F}     printf("F(%s)", yytext);    return FROM;
-{T}     printf("T(%s)", yytext);    return TO;
-{SP}    printf("SP(%s)", yytext);   return SRCPORTSTR;
-{DP}    printf("DP(%s)", yytext);   return DESTPORTSTR;
-{PORT}  printf("PORT(%s)", yytext); return PORT;
-%%
-/*
 {ID}    return ID;
 {IP}    return IP;
 {A}     return ACTION;
@@ -55,5 +48,17 @@ PORT  ([0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|655
 {SP}    return SRCPORTSTR;
 {DP}    return DESTPORTSTR;
 {PORT}  return PORT;
+%%
+
+/*
+{ID}    printf("ID(%s)", yytext);   return ID;
+{IP}    printf("IP(%s)", yytext);   return IP;
+{A}     printf("A(%s)", yytext);    return ACTION;
+{P}     printf("P(%s)", yytext);    return PROTOCOL;
+{F}     printf("F(%s)", yytext);    return FROM;
+{T}     printf("T(%s)", yytext);    return TO;
+{SP}    printf("SP(%s)", yytext);   return SRCPORTSTR;
+{DP}    printf("DP(%s)", yytext);   return DESTPORTSTR;
+{PORT}  printf("PORT(%s)", yytext); return PORT;
 */
 
