@@ -699,7 +699,7 @@ void get_packet_info(struct packet_info *packet, struct sk_buff *skb, bool in)
     packet->proto = IP;
   }
 
-  printk(KERN_INFO "%s packet: src ip=%pI4:%u, dst ip=%pI4:%u, protol=%s\n", in_out_str(in), &packet->src_ip, packet->src_port, &packet->dest_ip, packet->dest_port, proto_ver(packet->proto));
+  printk(KERN_INFO "%s: %s from %pI4 to %pI4 src-port %u dst-port %u\n", in_out_str(in), proto_ver(packet->proto), &packet->src_ip, &packet->dest_ip, packet->src_port, packet->dest_port);
 }
 
 
