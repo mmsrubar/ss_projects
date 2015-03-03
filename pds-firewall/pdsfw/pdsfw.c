@@ -378,6 +378,7 @@ static ssize_t procRead(struct file *fp, char *buffer, size_t len,
     procf_buffer_pos = 0;
     ret = 0;
 
+    printk(KERN_INFO "starting reading rules from the list\n");
     list_for_each_entry(rule, &policy_list.list, list) {
 
       finished = 1;
@@ -385,7 +386,7 @@ static ssize_t procRead(struct file *fp, char *buffer, size_t len,
       /* number */
       sprintf(token, "%u", rule->num);
       add_token_to_buf(&procf_buffer_pos, token, " ");
-      for (i = 0; i < 5 - strlen(token); i++) {
+      for (i = 0; i < 6 - strlen(token); i++) {
         memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
       }
 
