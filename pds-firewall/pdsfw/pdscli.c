@@ -97,7 +97,7 @@ int print_rules()
     return EXIT_FAILURE;
   }
 
-  printf("id    action srcip           srcport dstip           dstport protocol\n");
+  printf("id     action srcip           srcport dstip           dstport protocol\n");
   while ((ch = fgetc(f)) != EOF) {
     printf("%c",ch);
   }
