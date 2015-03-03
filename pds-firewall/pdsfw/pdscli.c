@@ -2,7 +2,12 @@
  * Project:     Simple Firewall (PDS)
  * Author:      Michal Srubar, xsruba03@stud.fit.vutbr.cz
  * Date:        Sun Mar  1 00:31:18 CET 2015
+ *
  * Description: 
+ * This is a client side for simple firewall. It was created as a school project
+ * for PDS seminar. The following article was used a tutorial for this project:
+ * http://www.roman10.net/a-linux-firewall-using-netfilter-part-1overview/
+ *
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +19,8 @@
  
 #define PROCF_NAME  "/proc/pdsfw_xsruba03"
 #define BUF_SIZE    124
+#define ID_MAX      1000000
+#define ID_MIN      1
 
 #define eprintf(ok_to_print, format, ...) do {                 \
     if (ok_to_print)                              \
@@ -50,16 +57,17 @@ void yyerror(const char *str)
  
 int yywrap()
 {
-  /*
-  if ((yyin = fopen("one-rule.in", "r")) != NULL)
-    return 0;
-  else
-  */
-    return 1;
+  return 1;
 } 
   
 void usage()
 {
+  fputs("\
+This is a user space command line application for a simple firewall. It\n\
+communicates with a kernel module through the /proc file system. Kernel \n\
+module provides packet classification based on rules which can be specified\n\ 
+with this utility.\n", stdout);
+
   printf("Usage: %s [options] [filter]\n", program_name);
 
   fputs("\n\
@@ -70,7 +78,7 @@ options:\n\
 \n\
 filter:\n\
   -a rule    : Add rule.\n\
-  -d rule-id : Remove rule by its ID.\n\
+  -d rule-id : Remove rule by its ID. Range of IDs is (1, 1000000)\n\
 ", stdout);
 
 
@@ -78,7 +86,7 @@ filter:\n\
 Rules has to have the following format:\n\
 <number> <action> <protocol> from <src IP> to <dest IP> [src-port <srcPort>] [dst-port <dstPort>]\n\
 \n\
-<number>   : number of a rule\n\
+<number>   : number of a rule in range of (1, 1000000)\n\
 <action>   : allow | deny\n\
 <protocol> : tcp | udp | icmp | ip\n\
 <src IP>   : IPv4 address | any\n\
@@ -89,7 +97,6 @@ Rules has to have the following format:\n\
 }
 
 /* Send print command to the kernel module.
- *
  * @return EXIT_FAILURE on error, EXIT_SUCCESS otherwise
  */
 int print_rules()
@@ -123,15 +130,19 @@ int print_rules()
 /* Copy content of a file with rule directly into the /proc file. Syntax is
  * checked automatically by yacc before this funcion is called.
  * 
- * @param options  structure containg program flags
- * @param input file with rules
- *
- * @return EXIT_FAILURE on error, EXIT_SUCCESS otherwise
+ * @param   options structure containg program flags
+ * @param   input file with rules
+ * @return  EXIT_FAILURE on error, EXIT_SUCCESS otherwise
  */
 int add_rules(struct cmdline_options *options, FILE *input)
 {
   FILE *output;
   char line[256];
+
+  if (options == NULL || input == NULL) {
+    fprintf(stderr, "Internal Error: %s(NULL paramater)\n", __func__);
+    return EXIT_FAILURE;
+  }
 
   if ((output = fopen(PROCF_NAME, "w")) == NULL) {
     perror("fopen()");
@@ -151,18 +162,22 @@ int add_rules(struct cmdline_options *options, FILE *input)
   return EXIT_SUCCESS;
 }
 
-/* Write a single rule which was specified as program argument after -a option
+/* Write a single rule which was specified as a program argument after -a option
  * into the /proc file.
  *
- * @param options  structure containg program flags
- * @param rule  rule as a string
- *
- * @return EXIT_FAILURE on error, EXIT_SUCCESS otherwise
+ * @param   options  structure containg program flags
+ * @param   rule  rule as a string
+ * @return  EXIT_FAILURE on error, EXIT_SUCCESS otherwise
  */
 int add_single_rule(struct cmdline_options *options, const char *rule)
 {
   FILE *f;
   int ret;
+
+  if (options == NULL || rule  == NULL) {
+    fprintf(stderr, "Internal Error: %s(NULL paramater)\n", __func__);
+    return EXIT_FAILURE;
+  }
 
   if ((f = fopen(PROCF_NAME, "w")) == NULL) {
     perror("fopen()");
@@ -189,13 +204,17 @@ int add_single_rule(struct cmdline_options *options, const char *rule)
 
 /* Construct and send a delete command to the kernel side.
  *
- * @param num The id of the rule which will be deleted.
- *
- * @return EXIT_FAILURE on error, EXIT_SUCCESS otherwise
+ * @param   num The id of the rule which will be deleted.
+ * @return  EXIT_FAILURE on error, EXIT_SUCCESS otherwise
  */
 int delete_rule(int num)
 {
   FILE *f;
+
+  if (num < ID_MIN || num > ID_MAX) {
+    fprintf(stderr, "Error: %s() Invalid or out of range id: \'%s\'\n", __func__, optarg);
+    return EXIT_FAILURE;
+  }
 
   if ((f = fopen(PROCF_NAME, "w")) == NULL) {
     perror("fopen()");
@@ -211,6 +230,40 @@ int delete_rule(int num)
   }
 
   return EXIT_SUCCESS;
+}
+
+/* Check the syntax of file where rules will be read from.
+ * @options:  command line options including file name
+ *
+ * @return:   pointer to file with rules if the syntax is alright, NULL
+ *            otherwise
+ */
+FILE *chech_file_syntax(struct cmdline_options *options)
+{
+  FILE *input;
+
+  if (options == NULL) {
+    fprintf(stderr, "Internal Error: NULL pointer to options struct\n");
+    return NULL;
+  }
+
+  if ((input = fopen(options->file, "r")) == NULL) {
+    perror("fopen()");
+    return NULL;
+  }
+
+  yyin = input;
+  if (yyparse() == EXIT_SUCCESS) {
+    eprintf(options->v, "> syntax of rules in the file %s is OK\n", options->file);
+  }
+
+  /* get back to the begining of the file because yacc read it all */
+  if (fseek(input, 0, SEEK_SET)) {
+    fprintf(stderr, "Error: seeking to start of file");
+    return NULL;
+  }
+
+  return input;
 }
 
 int main(int argc, char *argv[])
@@ -240,13 +293,32 @@ int main(int argc, char *argv[])
       case 'f':
         options.f = true;
         options.file = optarg;
-        break;
+        eprintf(options.v, "> firewall policy rules will be taken from the file %s\n", options.file);
+
+        if ((input = chech_file_syntax(&options)) != NULL) {
+          add_rules(&options, input);
+
+          if (fclose(input) == EOF) {
+            perror("fclose()");
+            return EXIT_FAILURE;
+          }
+        } else {
+          return EXIT_FAILURE;
+        }
+       break;
       case 'p':
         options.p = true;
+        eprintf(options.v, "> Reading rules from %s\n", PROCF_NAME);
+        print_rules();
         break;
       case 'd':
         options.d = true;
-        options.id = atoi(optarg);
+        if ((options.id = atoi(optarg)) == 0) {
+          fprintf(stderr, "Error: Invalid or out of range id: \'%s\'\n", optarg);
+          return EXIT_FAILURE;
+        }
+        eprintf(options.v, "> Removing rule with id=%d\n", options.id);
+        delete_rule(options.id);
         break;
       case 'a':
         options.a= true;
@@ -281,40 +353,6 @@ int main(int argc, char *argv[])
     yy_delete_buffer(buffer);
 
   } 
-  else if (options.f) {
-    eprintf(options.v, "> firewall policy rules will be taken from the file %s\n", options.file);
-
-    if ((input = fopen(options.file, "r")) == NULL) {
-      perror("fopen()");
-      return EXIT_FAILURE;
-    }
-
-    yyin = input;
-    if (yyparse() == EXIT_SUCCESS) {
-      eprintf(options.v, "> syntax of rules in the file %s is OK\n", options.file);
-    }
-
-    /* get back to the begining of the file because yacc read it all */
-    if (fseek(input, 0, SEEK_SET)) {
-      fprintf(stderr, "Error: seeking to start of file");
-      return 1;
-    }
-
-    add_rules(&options, input);
-
-    if (fclose(input) == EOF) {
-      perror("fclose()");
-      return 1;
-    }
-  } 
-  else if (options.p) {
-    eprintf(options.v, "> Reading rules from %s\n", PROCF_NAME);
-    print_rules();
-  } 
-  else if (options.d) {
-    eprintf(options.v, "> Removing rule with id=%d\n", options.id);
-    delete_rule(options.id);
-  }
    
   return EXIT_SUCCESS;
-} 
+}
