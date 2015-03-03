@@ -22,16 +22,18 @@
 //#define PROCF_MAX_SIZE  1024
 #define PROCF_MAX_SIZE  25
 
-#define proto_ver(x) (x == UDP) ? "udp" : ((x==ICMP) ? "icmp" : "tcp")
+#define proto_ver(x) (x == UDP) ? "udp" : ((x==TCP) ? "tcp" : \
+    ((x==ICMP) ? "icmp" : "ip"))
 #define action_str(x) (x == ALLOW) ? "allow" : "deny"
 #define in_out_str(x) (x == true) ? "INCOMMING" : "OUTGOING"
 
-#define IP        0   //FIXME
-#define ICMP        1
-#define UDP         17
-#define TCP         6
-#define ALLOW       1
-#define DENY        2
+#define ICMP  1
+#define UDP   17
+#define TCP   6
+#define IP    150   /* this one is not defined so I use it for IP packets */
+
+#define ALLOW 1
+#define DENY  2
 
 
 MODULE_LICENSE("GPL");
@@ -65,6 +67,7 @@ struct packet_info {
   unsigned int dest_ip;
   unsigned int src_port;
   unsigned int dest_port;
+  int proto;
 };
 
 //the structure used for procfs
@@ -214,12 +217,12 @@ static int classificate(struct packet_info *packet, bool in)
       }
     }
 
-    if (rule->protocol != packet->ip_header->protocol) {
+    if (rule->protocol != packet->proto) {
       /* rule's protocol doesn't match, try next rule */
       printk(KERN_INFO "protocol didn't matched\n");
       continue;
     } else {
-      printk(KERN_INFO "MATCH protocol: %d == %d?\n", rule->protocol, packet->ip_header->protocol);
+      printk(KERN_INFO "MATCH protocol: %d == %d?\n", rule->protocol, packet->proto);
     }
 
     /* the packet successfully passed the through the rule, do the action */
@@ -678,17 +681,25 @@ void get_packet_info(struct packet_info *packet, struct sk_buff *skb, bool in)
   packet->ip_header = (struct iphdr *)skb_network_header(skb);
   packet->src_ip = (unsigned int)packet->ip_header->saddr;
   packet->dest_ip = (unsigned int)packet->ip_header->daddr;
+
+  printk(KERN_INFO "protocol: %d\n", packet->ip_header->protocol);
   if (packet->ip_header->protocol == UDP) {
+    packet->proto = UDP;
     packet->udp_header = (struct udphdr *)(skb_transport_header(skb)+20);
     packet->src_port = (unsigned int)ntohs(packet->udp_header->source);
     packet->dest_port = (unsigned int)ntohs(packet->udp_header->dest);
   } else if (packet->ip_header->protocol == TCP) {
+    packet->proto = TCP;
     packet->tcp_header = (struct tcphdr *)(skb_transport_header(skb)+20);
     packet->src_port = (unsigned int)ntohs(packet->tcp_header->source);
     packet->dest_port = (unsigned int)ntohs(packet->tcp_header->dest);
+  } else if (packet->ip_header->protocol == ICMP) {
+    packet->proto = ICMP;
+  } else {
+    packet->proto = IP;
   }
 
-  printk(KERN_INFO "%s packet: src ip=%pI4:%u, dst ip=%pI4:%u, protol=%s\n", in_out_str(in), &packet->src_ip, packet->src_port, &packet->dest_ip, packet->dest_port, proto_ver(packet->ip_header->protocol));
+  printk(KERN_INFO "%s packet: src ip=%pI4:%u, dst ip=%pI4:%u, protol=%s\n", in_out_str(in), &packet->src_ip, packet->src_port, &packet->dest_ip, packet->dest_port, proto_ver(packet->proto));
 }
 
 
@@ -741,11 +752,9 @@ int init_module()
   INIT_LIST_HEAD(&(policy_list.list));
   add_rule(20, DENY, ICMP, "192.168.0.1", NULL, false, true, 0, 0);
   add_rule(1, DENY, ICMP, "127.0.0.1", NULL, false, true, 0, 0);
-  /*
   add_rule(20, DENY, ICMP, "192.168.0.1", NULL, false, true, 0, 0);
   add_rule(30, ALLOW, ICMP, "192.168.123.123", "192.168.123.123", false, false, 65535, 65535);
   add_rule(15, ALLOW, TCP, NULL, "192.168.0.1", true, false, 0, 0);
-  */
 
   procf_buffer = (char *) vmalloc(PROCF_MAX_SIZE);
 
