@@ -37,6 +37,7 @@ T     to|TO
 SP    src-port|SRC-PORT
 DP    dst-port|DST-PORT
 PORT  ([0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])
+SPACE [ \t]+
 
 %%
 {ID}    return ID;
@@ -48,9 +49,25 @@ PORT  ([0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|655
 {SP}    return SRCPORTSTR;
 {DP}    return DESTPORTSTR;
 {PORT}  return PORT;
+[ ]     /* eat spaces between rules items */
+[\n]    /* eat new lines at the ends of rules */
+
+
 %%
 
 /*
+{ID}    return ID;
+{IP}    return IP;
+{A}     return ACTION;
+{P}     return PROTOCOL;
+{F}     return FROM;
+{T}     return TO;
+{SP}    return SRCPORTSTR;
+{DP}    return DESTPORTSTR;
+{PORT}  return PORT;
+[\n]    printf("NEW-LINE");
+
+
 {ID}    printf("ID(%s)", yytext);   return ID;
 {IP}    printf("IP(%s)", yytext);   return IP;
 {A}     printf("A(%s)", yytext);    return ACTION;
@@ -60,5 +77,7 @@ PORT  ([0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|655
 {SP}    printf("SP(%s)", yytext);   return SRCPORTSTR;
 {DP}    printf("DP(%s)", yytext);   return DESTPORTSTR;
 {PORT}  printf("PORT(%s)", yytext); return PORT;
+[\n]    printf("NEW-LINE");
+
 */
 
