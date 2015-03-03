@@ -28,14 +28,24 @@ extern void yy_delete_buffer(YY_BUFFER_STATE buffer);
 extern FILE *yyin;
 extern int yylex(void);
 
-struct prog_stat {
-  bool v;         /* verbose mode */
-  bool add_rule;
+static const char *program_name;
+
+struct cmdline_options {
+  /* flag for each command line option */
+  bool v; /* verbose mode */
+  bool a; /* add rule */ 
+  bool p; /* print rules */
+  bool d; /* delete a rule */
+  bool f; /* read rules from a file */
+
+  int id;
+  const char *file;
 };
 
 void yyerror(const char *str)
 {
-        fprintf(stderr,"error: %s\n",str);
+  fprintf(stderr,"Rule error: %s\n", str);
+  fprintf(stderr,"Try %s -h to see the format of a rule\n", program_name);
 }
  
 int yywrap()
@@ -48,7 +58,7 @@ int yywrap()
     return 1;
 } 
   
-void usage(const char *program_name)
+void usage()
 {
   printf("Usage: %s [options] [filter]\n", program_name);
 
@@ -65,7 +75,7 @@ filter:\n\
 
 
   fputs("\n\
-Rules has to have following format:\n\
+Rules has to have the following format:\n\
 <number> <action> <protocol> from <src IP> to <dest IP> [src-port <srcPort>] [dst-port <dstPort>]\n\
 \n\
 <number>   : number of a rule\n\
@@ -91,7 +101,7 @@ int print_rules()
     perror("fopen()");
 
     if (errno == ENOENT) {
-      printf("Error: Is the kernel module loaded? (try lsmod|grep pdsfw)\n");
+      fprintf(stderr, "Error: Is the kernel module loaded? (try lsmod|grep pdsfw)\n");
     }
 
     return EXIT_FAILURE;
@@ -113,12 +123,12 @@ int print_rules()
 /* Copy content of a file with rule directly into the /proc file. Syntax is
  * checked automatically by yacc before this funcion is called.
  * 
- * @param stat  structure containg program flags
+ * @param options  structure containg program flags
  * @param input file with rules
  *
  * @return EXIT_FAILURE on error, EXIT_SUCCESS otherwise
  */
-int add_rules(struct prog_stat *stat, FILE *input)
+int add_rules(struct cmdline_options *options, FILE *input)
 {
   FILE *output;
   char line[256];
@@ -129,7 +139,7 @@ int add_rules(struct prog_stat *stat, FILE *input)
   }
 
   while (fgets(line, sizeof(line), input) != NULL) {
-    eprintf(stat->v, "> coping line: %s\n", line);
+    eprintf(options->v, "> coping line: %s", line);
     fprintf (output, line);
   }
 
@@ -144,12 +154,12 @@ int add_rules(struct prog_stat *stat, FILE *input)
 /* Write a single rule which was specified as program argument after -a option
  * into the /proc file.
  *
- * @param stat  structure containg program flags
+ * @param options  structure containg program flags
  * @param rule  rule as a string
  *
  * @return EXIT_FAILURE on error, EXIT_SUCCESS otherwise
  */
-int add_single_rule(struct prog_stat *stat, const char *rule)
+int add_single_rule(struct cmdline_options *options, const char *rule)
 {
   FILE *f;
   int ret;
@@ -166,7 +176,7 @@ int add_single_rule(struct prog_stat *stat, const char *rule)
     return EXIT_FAILURE;
   }
 
-  eprintf(stat->v, "> Buffer (%dB) was written to the file %s\n", ret, PROCF_NAME);
+  eprintf(options->v, "> Buffer (%dB) was written to the file %s\n", ret, PROCF_NAME);
 
   if (fclose(f) == EOF) {
     fprintf(stderr, 
@@ -210,59 +220,36 @@ int main(int argc, char *argv[])
   int count = 0;
   /* buffer for single rule from command line (-a option) */
   char sr_buf[BUF_SIZE] = {[BUF_SIZE-1] = '\0'};
-  struct prog_stat stat = {.v= false, .add_rule = false};
+  struct cmdline_options options = {false, false, false, 0, NULL};
+  program_name = argv[0];
 
   if (argc <= 1) {
-    usage(argv[0]);
-    return 0;
+    usage();
+    return EXIT_SUCCESS;
   }
 
-  while ((ch = getopt(argc, argv, "hf:pd:av")) != EOF) {
+  while ((ch = getopt(argc, argv, "hpvaf:d:")) != EOF) {
     switch (ch) {
       case 'h':
-        usage(argv[0]);
-        return 0;
+        usage();
+        return EXIT_SUCCESS;
       case 'v':
-        stat.v = true;
-        eprintf(stat.v, "> verbose mode: on\n");
+        options.v = true;
+        eprintf(options.v, "> verbose mode: on\n");
         break;
       case 'f':
-        eprintf(stat.v, "> firewall policy rules will be taken from the file %s", optarg);
-
-        if ((input = fopen(optarg, "r")) == NULL) {
-          perror("fopen()");
-          return 1;
-        }
-
-        yyin = input;
-        if (yyparse() == EXIT_SUCCESS) {
-          eprintf(stat.v, "> syntax of rules in file %s is OK\n", optarg);
-        }
-
-        /* get back to the begining of the file because yacc read it all */
-        if (fseek(input, 0, SEEK_SET)) {
-          puts("Error seeking to start of file");
-          return 1;
-        }
-
-        add_rules(&stat, input);
-
-        if (fclose(input) == EOF) {
-          perror("fclose()");
-          return 1;
-        }
+        options.f = true;
+        options.file = optarg;
         break;
       case 'p':
-        eprintf(stat.v, "> Reading rules from %s\n", PROCF_NAME);
-        print_rules();
-        return 0;
+        options.p = true;
+        break;
       case 'd':
-        eprintf(stat.v, "> Removing rule with id=%d\n", atoi(optarg));
-        delete_rule(atoi(optarg));
-        return 0;
+        options.d = true;
+        options.id = atoi(optarg);
+        break;
       case 'a':
-        eprintf(stat.v, "> Addding a new rule\n");
-        stat.add_rule = true;
+        options.a= true;
         break;
       default:
         fprintf(stderr, "Unknown option: '%s'\n", optarg);
@@ -273,11 +260,14 @@ int main(int argc, char *argv[])
   argc -= optind;
   argv += optind;
 
-  if (stat.add_rule) {
-    /* 1. check the syntax of a rule
-     * 2. write it into the buffer
-     * 3. write it directly into the file?
-     */
+  if (options.a) {
+    eprintf(options.v, "> Addding a new rule\n");
+
+    if (argc < 6) {
+      fprintf(stderr, "Error: no rule specified\n");
+      return EXIT_FAILURE;
+    }
+
     for (count = 0; count < argc; count++) {
       strcat(sr_buf, argv[count]);
       strcat(sr_buf, " ");
@@ -285,12 +275,46 @@ int main(int argc, char *argv[])
 
     YY_BUFFER_STATE buffer = yy_scan_string(sr_buf);
     if (yyparse() == EXIT_SUCCESS) {
-      eprintf(stat.v, "> syntax of the rule \'%s\' is OK\n", sr_buf);
-      add_single_rule(&stat, sr_buf);
+      eprintf(options.v, "> syntax of the rule \'%s\' is OK\n", sr_buf);
+      add_single_rule(&options, sr_buf);
     }
     yy_delete_buffer(buffer);
-  }
 
-  return 0;
-//yywrap();
+  } 
+  else if (options.f) {
+    eprintf(options.v, "> firewall policy rules will be taken from the file %s\n", options.file);
+
+    if ((input = fopen(options.file, "r")) == NULL) {
+      perror("fopen()");
+      return EXIT_FAILURE;
+    }
+
+    yyin = input;
+    if (yyparse() == EXIT_SUCCESS) {
+      eprintf(options.v, "> syntax of rules in the file %s is OK\n", options.file);
+    }
+
+    /* get back to the begining of the file because yacc read it all */
+    if (fseek(input, 0, SEEK_SET)) {
+      fprintf(stderr, "Error: seeking to start of file");
+      return 1;
+    }
+
+    add_rules(&options, input);
+
+    if (fclose(input) == EOF) {
+      perror("fclose()");
+      return 1;
+    }
+  } 
+  else if (options.p) {
+    eprintf(options.v, "> Reading rules from %s\n", PROCF_NAME);
+    print_rules();
+  } 
+  else if (options.d) {
+    eprintf(options.v, "> Removing rule with id=%d\n", options.id);
+    delete_rule(options.id);
+  }
+   
+  return EXIT_SUCCESS;
 } 
