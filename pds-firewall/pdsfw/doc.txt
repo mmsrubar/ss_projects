@@ -1,0 +1,8 @@
+- setříděný seznam pravidel definuje akce, které mají být aplikovaný na příchozí
+  a odchozí pakety
+- jakmile prijde paket, tak porovnan se vsemi pravidly dokud neni nalezena
+  schoda - tomu se rika first-match policy 
+  - pokud se najde schoda je provedena prislusna akce
+
+- mnozinu hodnot ID pravidel jsem omezil na interval (0, 1000000)
+- uvest odkaz na tutorial ze ktereho si vychazel
