@@ -8,6 +8,9 @@
  * for PDS seminar. The following article was used a tutorial for this project:
  * http://www.roman10.net/a-linux-firewall-using-netfilter-part-1overview/
  *
+ * FIXME:
+ * - if the file with rules is too big then flex wount handle it so it would be
+ *   better to read rules line by line and also give to flex line by line?
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -255,6 +258,8 @@ FILE *chech_file_syntax(struct cmdline_options *options)
   yyin = input;
   if (yyparse() == EXIT_SUCCESS) {
     eprintf(options->v, "> syntax of rules in the file %s is OK\n", options->file);
+  } else {
+    return NULL;
   }
 
   /* get back to the begining of the file because yacc read it all */
