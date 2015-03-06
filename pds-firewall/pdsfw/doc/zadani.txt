@@ -1,0 +1,119 @@
+Společná část popisu:
+Projekt odevzdáváte jako archiv se všemi zdrojovými soubory, dokumentací a dalšími pomocnými provozy. Název archivu: xlogin00.tar.gz.
+ 
+Na výběr jsou následující varianty projektu:
+
+    Varianta 1: Firewall
+    Varianta 2: Zájmový projekt
+    Varianta 3: Uznání bodů z minulého roku
+
+Popis varianty:
+ZADÁNÍ:
+Vašim úkolem je:
+1) Nastudovat problematiku a algoritmy pro klasifikaci a filtrování dat.
+2) Implementovat vámi vybrané algoritmy jako kernel modul pro netfilter.
+3) Vytvořit userspace aplikaci, která bude kernel modulu předávat potřebná pravidla.
+4) Sepsání projektové dokumentace.
+
+UPŘESNĚNÍ ZADÁNÍ:
+
+Cílem projektu je vytvořit jednoduchý firewall pro operační systém Linux. Kernel modul implementuje vhodný algoritmus pro klasifikaci dat. Filtrovací pravidla jsou modulu předány pomocí userspace aplikace.
+
+Filtrovací pravidla:
+
+Pravidla musí být zadána v následujícím formátu:
+
+<number> <action> <protocol> from <src IP> to <dest IP> [src-port <srcPort>] [dst-port <dstPort>]
+
+<number>:   číslo pravidla
+<action>:     allow | deny
+<protocol>:  tcp | udp | icmp | ip
+<src IP>:     IPv4 adresa | any
+<dst IP>:     IPv4 adresa | any
+<srcPort>:   číslo portu
+<dstPort>:   číslo portu
+
+Příklad pravidel:
+
+10 allow tcp from 147.229.1.1 to any dst-port 80
+20 allow udp from any to 8.8.8.8 src-port 53
+30 allow icmp from 147.229.1.1 to any
+40 deny ip from any to any
+
+Pro zpracování pravidel je doporučováno použít nástroje flex a bison jako lexikální a syntaktický analyzátor. Nedoporučuje se vytvářet vlastní parsery!
+
+Kernel modul a userspace aplikace:
+Modul "pdsfw" implementuje kernel modul pro jádro GNU/Linux. Využívá netfilter pro zachycení paketů při přijetí. V rámci modulu bude implementována filtrační logika, která rozhodne, zda paket zahodí nebo propustí. Vhodný algoritmus je na vás, lze se inspirovat v přednáškách předmětu ISA.
+
+Pro komunikaci s kernel modulem implementujte userspace aplikaci "pdscli", která zkontroluje syntaktickou správnost pravidla, předá ho danému kernel modulu, jenž ho přidá nebo odebere ze svých stávajících pravidel. Userspace aplikace bude mít následující vstup/výstup.
+
+pdscli [options] [filter]
+
+options:
+
+    -f filter-file : Načte pravidla pro firewall ze souboru. Jedno pravidlo na řádku.
+    -p             : Vypíše aktuální pravidla obsažená v modulu
+
+filter:
+
+    -a rule       :    Přidá pravidlo do modulu
+    -d rule-id    :    Odebere id pravidla z modulu
+
+
+Příklady použití:
+
+# cat rules
+10 allow tcp from 147.229.1.1 to any dst-port 80
+20 allow udp from any to 8.8.8.8 src-port 53
+30 allow icmp from 147.229.1.1 to any
+40 deny ip from any to any
+
+# pdscli -f rules
+# pdscli -a 15 allow tcp from 147.229.1.2 to any dst-port 8080
+# pdscli -d 30
+# pdscli -p
+id    action     srcip              srcport     dstip                 dstport   protocol
+10   allow      147.229.1.1     *             *                     80          tcp
+15   allow      147.229.1.2     *             *                     8080       tcp
+20   allow      *                   53            8.8.8.8             *            tcp
+40   deny      *                   *             *                     *            ip
+
+POKYNY K IMPLEMENTACI:
+
+    Referenční image pro VirtualBox Ubuntu 12.04 LTS je dostupný na http://nes.fit.vutbr.cz/isa/ISA2014.ova. Lze použít vše, co je na daném stroji dostupné.
+    Vyhněte se globálním proměnným!
+    Jako kostru projektu lze použít http://www.roman10.net/a-linux-firewall-using-netfilter-part-1overview/, kde je popsáno vytvoření kernelového modulu, vytvoření userspace aplikace, procfs systému pro komunikaci mezi modulem a aplikací.
+    Analýzu pravidel udělejte ideálně pomocí nástrojů bison/flex.
+    Jako filtrační logiku můžete použít lineární seznam, jako v odkazovaném článku, nicméně pak lze získat maximálně 80% bodového hodnocení.
+    Implicitní chování je pakety propouštět - tedy pokud není nastavené žádné pravidlo, nic se nezahazuje.
+
+
+POKYNY K ODEVZDÁNÍ:
+
+    Odevzdává se jeden archív s jmenou konvencí "xlogin00.tar.gz", který obsahuje všechny potřebné soubory k běhu a dokumentaci. Po rozbalení souboru bude k dispozici Makefile, který umožní překlad modulu a userspace aplikace.
+    Pokud výsledkem nebude spustitelný soubor "pdscli" a kernel modul "pdsfw", který lze zavést do jádra, projekt nebude hodnocen!
+
+
+POKYNY K DOKUMENTACI:
+Součástí projektu je projektová dokumentace, která popisuje použitý způsob řešení problému, jaké algoritmy byly použity atp. Součástí není teoretický rozbor, co je to IP adresa, případně překopírované zadání projektu s poznámkou, že bylo splněno. V dokumentaci by se měly vyskytnout výsledky - jaké algoritmy byly použity pro klasifikaci, jaká je jejich časová/prostorová složitost, apod. I dokumentace je velkou součástí hodnocení projektu.
+
+ZPŮSOB OPRAVOVÁNÍ A HODNOCENÍ:
+
+    Projekt bude testován na stroji s referenční instalací systému se sadou pravidel, podobných jako v zadání projektu. Testuje se správné propuštění/zahození paketu.
+    Pokud projekt implementuje filtraci pouze lineárním seznamem bude možno získat maximálně 80% bodového hodnocení.
+    Jako rozšíření lze implementovat podporu pro protokol IPv6.
+
+
+DOPORUČENÍ/OMEZENÍ:
+
+    Do souboru Readme uveďte VE VLASTNÍM ZÁJMU případná omezení funkcionality vašeho projektu - na dokumentovanou chybu se nahlíží v lepším světle než na nedokumentovanou!
+    Do bibliografie i kódu uvádějte všechny externí zdroje. Vyhnete se tak případným nařčením z plagiátorství!
+    Lze se inspirovat projektem nfdump.
+
+Aktualizace 13.2.2015:
+
+    Oprava chyb příkladu zadávání pravidel (chybělo from/to pro poslední pravidlo); přidáno implicitní chování (vše propustit). Děkuji Petru Hufovi za nahlášení chyb.
+
+Aktualizace 16.2.2015:
+
+    Přidání ID do výpisu pravidel. Děkuji Honzovi Kalinovi za náhlášení chyby.
