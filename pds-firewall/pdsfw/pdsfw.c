@@ -19,8 +19,10 @@
 #include <linux/netfilter_ipv4.h>
  
 #define PROCF_NAME "pdsfw_xsruba03"
+#define PROCF_MAX_SIZE  128
+//#define PROCF_MAX_SIZE  512
 //#define PROCF_MAX_SIZE  1024
-#define PROCF_MAX_SIZE  25
+//#define PROCF_MAX_SIZE  25
 
 #define proto_ver(x) (x == UDP) ? "udp" : ((x==TCP) ? "tcp" : \
     ((x==ICMP) ? "icmp" : "ip"))
@@ -35,14 +37,12 @@
 #define ALLOW 1
 #define DENY  2
 
-
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("PDS firewall");
 MODULE_AUTHOR("Michal Srubar, xsruba03@stud.fit.vutbr.cz");
 
 static struct nf_hook_ops nfho_in;
 static struct nf_hook_ops nfho_out;
-
 
 static struct fw_rule policy_list;
 
@@ -151,95 +151,13 @@ unsigned int port_str_to_int(char *port_str)
     return port;
 }
 
-static int classificate(struct packet_info *packet, bool in)
-{
-  struct list_head *p;
-  struct fw_rule *rule;
-  int i;
- 
-  /* go through the list of firewall's rules and if there is a match drop the
-   * packet. */
-  list_for_each(p, &policy_list.list) {
-    i++;
-    rule = list_entry(p, struct fw_rule, list);
-
-    printk(KERN_INFO "trying to apply rule %d\n", rule->num);
-    if (rule->src_ip_any) {
-      /* rule doesn't specify IPv4 address */
-    } else {
-      if (rule->src_ip != packet->src_ip) {
-        /* rule's src IPv4 doesn't match packet's IPv4, try next rule */
-        printk(KERN_INFO "src IP didn't matched\n");
-        continue;
-      } else {
-        printk(KERN_INFO "MATCH src IP: %d == %d?\n", rule->src_ip, packet->src_ip);
-      }
-
-    }
-
-    if (rule->dest_ip_any) {
-      /* rule doesn't specify IPv4 address */
-      printk(KERN_INFO "dest IP: any\n");
-    } else {
-      if (rule->dest_ip != packet->dest_ip) {
-        /* rule's dest IPv4 doesn't match packet's IPv4, try next rule */
-        printk(KERN_INFO "dest IP didn't matched\n");
-        continue;
-      } else {
-        printk(KERN_INFO "MATCH: dest IP: %d == %d?\n", rule->dest_ip, packet->dest_ip);
-      }
-    }
-
-    if (rule->src_port == 0) {
-      /* rule doesn't specify source port */
-    } else {
-      if (rule->src_port != packet->src_port) {
-        /* rule's source port doesn't match packet's packet's source port, 
-         * try next rule */
-        printk(KERN_INFO "src port didn't matched\n");
-        continue;
-      } else {
-        printk(KERN_INFO "MATCH: src port: %d == %d?\n", rule->src_port, packet->src_port);
-      }
-    }
-
-    if (rule->dest_port == 0) {
-      /* rule doesn't specify source port */
-    } else {
-      printk(KERN_INFO "dest port: %d == %d?\n", rule->dest_port, packet->dest_port);
-      if (rule->dest_port != packet->dest_port) {
-        /* rule's source port doesn't match packet's packet's source port, 
-         * try next rule */
-        printk(KERN_INFO "dest port didn't matched\n");
-        continue;
-      } else {
-        printk(KERN_INFO "MATCH: dest port: %d == %d?\n", rule->dest_port, packet->dest_port);
-      }
-    }
-
-    if (rule->protocol != packet->proto) {
-      /* rule's protocol doesn't match, try next rule */
-      printk(KERN_INFO "protocol didn't matched\n");
-      continue;
-    } else {
-      printk(KERN_INFO "MATCH protocol: %d == %d?\n", rule->protocol, packet->proto);
-    }
-
-    /* the packet successfully passed the through the rule, do the action */
-    if (rule->action == DENY) {
-      printk(KERN_INFO "Packet DROP (rule :%d)\n", rule->num);
-      return DENY;
-    }
-  }
-
-  /* default behaviour: allow the packet */
-  printk(KERN_INFO "Packet ALLOWED\n");
-  return ALLOW;
-}
 
 void print_rule(const char *msg, struct fw_rule *rule)
 {
-  printk(KERN_INFO "%s: %u %s %s from %pI4 (%s) to %pI4 (%s) src-port %u dest-port %u\n", msg, rule->num, action_str(rule->action), proto_ver(rule->protocol), &rule->src_ip, (rule->src_ip_any)?"any":"", &rule->dest_ip, (rule->dest_ip_any)?"any":"", rule->src_port, rule->dest_port);
+  printk(KERN_INFO "%s: %u %s %s from %pI4 (%s) to %pI4 (%s) src-port %u dest-port %u\n",
+     msg, rule->num, action_str(rule->action), proto_ver(rule->protocol), 
+     &rule->src_ip, (rule->src_ip_any)?"any":"", &rule->dest_ip, 
+     (rule->dest_ip_any)?"any":"", rule->src_port, rule->dest_port);
 }
 
 void ip_hl_to_str(unsigned int ip, char *ip_str)
@@ -361,14 +279,20 @@ int add_rule(
   return 0;
 }
 
-
+/* This func is called every time somebody will try to read from the PROCF_NAME
+ * file. Proc files is used to give a user rules that the firewall currently
+ * use.
+ *
+ * FIXME: you can't write more then 4096B (page size) ! you have to use seq
+ * files for that!
+ */
 static ssize_t procRead(struct file *fp, char *buffer, size_t len, 
                         loff_t *offset)
 {
   static int finished = 0;
   int ret;
   struct fw_rule *rule;
-  char token[20];
+  char token[20] = {[20-1] = '\0'};
   int i;
 
   printk(KERN_INFO "procf_read (/proc/%s) called \n", PROCF_NAME);
@@ -386,7 +310,8 @@ static ssize_t procRead(struct file *fp, char *buffer, size_t len,
 
       finished = 1;
 
-      /* number */
+      /* id */
+      printk(KERN_INFO "reading rule id=%s\n", rule->num);
       sprintf(token, "%u", rule->num);
       add_token_to_buf(&procf_buffer_pos, token, " ");
       for (i = 0; i < 6 - strlen(token); i++) {
@@ -450,8 +375,11 @@ static ssize_t procRead(struct file *fp, char *buffer, size_t len,
       /* protocol */
       strcpy(token, proto_ver(rule->protocol));
       add_token_to_buf(&procf_buffer_pos, token, "\n");
+
+      printk(KERN_INFO "procf_buffer_pos: %lu\n", procf_buffer_pos);
     }
 
+    printk(KERN_INFO "procf_buffer_pos: %lu\n", procf_buffer_pos);
     memcpy(buffer, procf_buffer, procf_buffer_pos);
     ret = procf_buffer_pos;
   }
@@ -503,7 +431,8 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
     return -EFAULT;
   }
 
-  printk(KERN_INFO "buf: %s\n", procfs_buffer);
+  //printk(KERN_INFO "buf(count=%d): %s\n", count, procfs_buffer);
+  printk(KERN_INFO "count=%d, off=%p:\n", count, off);
 
   /* delete command have following format: "d number" */
   if (strncmp(procfs_buffer, "delete", strlen("delete")) == 0) {
@@ -550,7 +479,8 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
       continue;
     }
 
-    printk(KERN_INFO "token: %s\n", token);
+
+    //printk(KERN_INFO "token (i=%d): %s\n", i, token);
     if (strcmp(token, "src-port") == 0) {
       type = SRC_PORT_STR;
     } else if (strcmp(token, "dst-port") == 0) {
@@ -559,11 +489,11 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
 
     switch (type) {
       case NUM:
-        printk(KERN_INFO "NUM <- %s\n", token);
+        //printk(KERN_INFO "NUM <- %s\n", token);
         num = str_to_uint(token);
         break;
       case ACTION:
-        printk(KERN_INFO "ACTION <- %s\n", token);
+        //printk(KERN_INFO "ACTION <- %s\n", token);
         if (strcmp(token, "deny") == 0) {
           action = DENY;
         } else {
@@ -571,7 +501,7 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
         }
         break;
       case PROTOCOL:
-        printk(KERN_INFO "PROTOCOL <- %s\n", token);
+        //printk(KERN_INFO "PROTOCOL <- %s\n", token);
         if (strcmp(token, "tcp") == 0) {
           protocol = TCP;
         } else if (strcmp(token, "udp") == 0) {
@@ -583,10 +513,10 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
         }
         break;
       case FROM:
-        printk(KERN_INFO "FROM <- %s\n", token);
+        //printk(KERN_INFO "FROM <- %s\n", token);
         break;
       case SRC_IP:
-        printk(KERN_INFO "SRC_IP <- %s\n", token);
+        //printk(KERN_INFO "SRC_IP <- %s\n", token);
         if (strcmp(token, "any") == 0) {
           src_ip_any = true;
         } else {
@@ -595,10 +525,10 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
         }
         break;
       case TO:
-        printk(KERN_INFO "TO <- %s\n", token);
+        //printk(KERN_INFO "TO <- %s\n", token);
         break;
       case DEST_IP:
-        printk(KERN_INFO "DEST_IP <- %s\n", token);
+        //printk(KERN_INFO "DEST_IP <- %s\n", token);
         if (strcmp(token, "any") == 0) {
           dest_ip_any = true;
         } else {
@@ -607,25 +537,24 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
         }
         break;
       case SRC_PORT_STR:
-        printk(KERN_INFO "SRC_PORT_STR <- %s\n", token);
+        //printk(KERN_INFO "SRC_PORT_STR <- %s\n", token);
         break;
       case SRC_PORT:
-        printk(KERN_INFO "SRC_PORT <- %s\n", token);
+        //printk(KERN_INFO "SRC_PORT <- %s\n", token);
         src_port = str_to_uint(token);
-        printk(KERN_INFO "src_port converted to: %d\n", src_port);
+        //printk(KERN_INFO "src_port converted to: %d\n", src_port);
         break;
       case DEST_PORT_STR:
-        printk(KERN_INFO "DEST_PORT_STR <- %s\n", token);
+        //printk(KERN_INFO "DEST_PORT_STR <- %s\n", token);
         break;
       case DEST_PORT:
-        printk(KERN_INFO "DEST_PORT <- %s\n", token);
+        //printk(KERN_INFO "DEST_PORT <- %s\n", token);
         dest_port = str_to_uint(token);
-        printk(KERN_INFO "dest_port converted to: %d\n", dest_port);
+        //printk(KERN_INFO "dest_port converted to: %d\n", dest_port);
         break;
     }
 
     if (rule_complete) {
-      printk(KERN_INFO "RULE READING DONE!\n");
       printk(KERN_INFO "RULE: %d %s %s from %s to %s src-port %u dest-port %u\n", 
                         num, action_str(action), proto_ver(protocol), src_ip, 
                         dest_ip, src_port, dest_port);
@@ -666,8 +595,97 @@ int procClose(struct inode *inode, struct file *fp) {
         return 0;
 }
 
+/* Packet classificator.
+ * @packet  information about the in/out packet
+ * @in      true if its incomming packet, false otherwise
+ * @return
+ */
+static int classificate(struct packet_info *packet, bool in)
+{
+  struct fw_rule *rule;
+  int i;
+ 
+  /* go through the list of rules and if there is a match drop the packet. */
+  list_for_each_entry(rule, &policy_list.list, list) {
+    i++;
+    //rule = list_entry(p, struct fw_rule, list);
 
-/* Get packet information and return it in packet struct 
+    printk(KERN_INFO "trying to apply rule %d\n", rule->num);
+    if (rule->src_ip_any) {
+      /* rule doesn't specify IPv4 address */
+    } else {
+      if (rule->src_ip != packet->src_ip) {
+        /* rule's src IPv4 doesn't match packet's IPv4, try next rule */
+        printk(KERN_INFO "src IP didn't matched\n");
+        continue;
+      } else {
+        printk(KERN_INFO "MATCH src IP: %d == %d?\n", rule->src_ip, packet->src_ip);
+      }
+
+    }
+
+    if (rule->dest_ip_any) {
+      /* rule doesn't specify IPv4 address */
+      printk(KERN_INFO "dest IP: any\n");
+    } else {
+      if (rule->dest_ip != packet->dest_ip) {
+        /* rule's dest IPv4 doesn't match packet's IPv4, try next rule */
+        printk(KERN_INFO "dest IP didn't matched\n");
+        continue;
+      } else {
+        printk(KERN_INFO "MATCH: dest IP: %d == %d?\n", rule->dest_ip, packet->dest_ip);
+      }
+    }
+
+    if (rule->src_port == 0) {
+      /* rule doesn't specify source port */
+    } else {
+      if (rule->src_port != packet->src_port) {
+        /* rule's source port doesn't match packet's packet's source port, 
+         * try next rule */
+        printk(KERN_INFO "src port didn't matched\n");
+        continue;
+      } else {
+        printk(KERN_INFO "MATCH: src port: %d == %d?\n", rule->src_port, packet->src_port);
+      }
+    }
+
+    if (rule->dest_port == 0) {
+      /* rule doesn't specify source port */
+    } else {
+      printk(KERN_INFO "dest port: %d == %d?\n", rule->dest_port, packet->dest_port);
+      if (rule->dest_port != packet->dest_port) {
+        /* rule's source port doesn't match packet's packet's source port, 
+         * try next rule */
+        printk(KERN_INFO "dest port didn't matched\n");
+        continue;
+      } else {
+        printk(KERN_INFO "MATCH: dest port: %d == %d?\n", rule->dest_port, packet->dest_port);
+      }
+    }
+
+    if (rule->protocol != packet->proto) {
+      /* rule's protocol doesn't match, try next rule */
+      printk(KERN_INFO "protocol didn't matched\n");
+      continue;
+    } else {
+      printk(KERN_INFO "MATCH protocol: %d == %d?\n", rule->protocol, packet->proto);
+    }
+
+    /* the packet successfully passed the through the rule, do the action */
+    if (rule->action == DENY) {
+      printk(KERN_INFO "Packet DROP (rule :%d)\n", rule->num);
+      return NF_DROP;
+    }
+  }
+
+  /* default behaviour: allow the packet */
+  printk(KERN_INFO "Packet ALLOWED\n");
+  return NF_ACCEPT;
+}
+
+
+/* Get packet information and return it in packet struct. 
  * @packet:   struct for packet information
  * @skb:      packet
  * @in:       incoming packet? outgoing otherwise
@@ -699,9 +717,10 @@ void get_packet_info(struct packet_info *packet, struct sk_buff *skb, bool in)
     packet->proto = IP;
   }
 
-  printk(KERN_INFO "%s: %s from %pI4 to %pI4 src-port %u dst-port %u\n", in_out_str(in), proto_ver(packet->proto), &packet->src_ip, &packet->dest_ip, packet->src_port, packet->dest_port);
+  printk(KERN_INFO "%s: %s from %pI4 to %pI4 src-port %u dst-port %u\n", 
+      in_out_str(in), proto_ver(packet->proto), &packet->src_ip, 
+      &packet->dest_ip, packet->src_port, packet->dest_port);
 }
-
 
 unsigned int hook_in_packet(const struct nf_hook_ops *ops, 
                             struct sk_buff *skb, 
@@ -715,11 +734,14 @@ unsigned int hook_in_packet(const struct nf_hook_ops *ops,
   get_packet_info(&packet, skb, true);
 
   /* classificat the incoming packet */
+  return classificate(&packet, false);
+  /*
   if (classificate(&packet, false) == DENY) {
     return NF_DROP;
   }
 
   return NF_ACCEPT;                
+  */
 }
 
 unsigned int hook_out_packet(const struct nf_hook_ops *ops, 
@@ -734,11 +756,7 @@ unsigned int hook_out_packet(const struct nf_hook_ops *ops,
   get_packet_info(&packet, skb, false);
 
   /* classificat the outgoing packet  */
-  if (classificate(&packet, false) == DENY) {
-    return NF_DROP;
-  }
-
-  return NF_ACCEPT;
+  return classificate(&packet, false);
 } 
 
 
@@ -746,18 +764,18 @@ unsigned int hook_out_packet(const struct nf_hook_ops *ops,
 int init_module()
 {
   static struct file_operations procFops;
-  printk(KERN_INFO "inicializing pds kernel firewall module\n");
+  printk(KERN_INFO "inicializing the PDS kernel firewall module\n");
 
   /* inicialize the list of firewall rules */
   INIT_LIST_HEAD(&(policy_list.list));
-  add_rule(20, DENY, ICMP, "192.168.0.1", NULL, false, true, 0, 0);
+  /*
   add_rule(1, DENY, ICMP, "127.0.0.1", NULL, false, true, 0, 0);
   add_rule(20, DENY, ICMP, "192.168.0.1", NULL, false, true, 0, 0);
   add_rule(30, ALLOW, ICMP, "192.168.123.123", "192.168.123.123", false, false, 65535, 65535);
   add_rule(15, ALLOW, TCP, NULL, "192.168.0.1", true, false, 0, 0);
+  */
 
   procf_buffer = (char *) vmalloc(PROCF_MAX_SIZE);
-
 
   /* inicialize operations for my proc file */
   procFops.open = procOpen;
@@ -807,7 +825,7 @@ void cleanup_module()
     kfree(rule);
   }
 
-  printk(KERN_INFO "removing netfilet in and out hooks\n");
+  printk(KERN_INFO "removing netfilters IN and OUT hooks\n");
   nf_unregister_hook(&nfho_in);
   nf_unregister_hook(&nfho_out);
 
