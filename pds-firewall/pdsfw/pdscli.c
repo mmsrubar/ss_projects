@@ -142,6 +142,8 @@ int add_rules(struct cmdline_options *options, FILE *input)
   FILE *output;
   char line[256];
 
+  eprintf(options->v, "> add_rules() called\n");
+
   if (options == NULL || input == NULL) {
     fprintf(stderr, "Internal Error: %s(NULL paramater)\n", __func__);
     return EXIT_FAILURE;
@@ -153,8 +155,14 @@ int add_rules(struct cmdline_options *options, FILE *input)
   }
 
   while (fgets(line, sizeof(line), input) != NULL) {
-    eprintf(options->v, "> coping line: %s", line);
-    fprintf (output, line);
+    fprintf(output, line);
+
+    /* write the line to the proc immediately so the proc write func in kernel module can read rules from the file line by line */
+    if (fflush(output) == EOF) {
+      perror("fflush()");
+      return EXIT_FAILURE;
+    }
+    eprintf(options->v, "> (%dB written) line: %s", strlen(line), line);
   }
 
   if (fclose(output) == EOF) {
@@ -293,7 +301,6 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
       case 'v':
         options.v = true;
-        eprintf(options.v, "> verbose mode: on\n");
         break;
       case 'f':
         options.f = true;
