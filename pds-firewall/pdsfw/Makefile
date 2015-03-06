@@ -5,16 +5,18 @@ obj-m += pdsfw.o
 all: pdscli
 	# -C will step into the kernel tree
 	# -M will jump back to you pwd
+	#make -C /media/sf_pds-kernel/linux-3.18.8	M=$(PWD) modules
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
 clean:
+	#make -C /media/sf_pds-kernel/linux-3.18.8	M=$(PWD) clean
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
 	rm -rf $(LOGIN).tar.gz example lex.yy.c grammar.tab.{c,h} grammar.output pdscli
 
 pdscli: grammar.tab.c lex.yy.c pdscli.c
-	gcc -g lex.yy.c grammar.tab.c pdscli.c -o pdscli
+	gcc -g -Wall -Wextra -pedantic lex.yy.c grammar.tab.c pdscli.c -o pdscli
 
 lex.yy.c: tokens.lex grammar.tab.h
-	flex-2.5.4a tokens.lex
+	flex tokens.lex
 
 grammar.tab.c: grammar.y
 	bison -d --verbose grammar.y
