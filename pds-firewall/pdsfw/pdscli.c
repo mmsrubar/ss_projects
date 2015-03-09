@@ -286,7 +286,8 @@ int main(int argc, char *argv[])
   int count = 0;
   /* buffer for single rule from command line (-a option) */
   char sr_buf[BUF_SIZE] = {[BUF_SIZE-1] = '\0'};
-  struct cmdline_options options = {false, false, false, 0, NULL};
+  struct cmdline_options options = {false, false, false, false, false, 0, NULL};
+
   program_name = argv[0];
 
   if (argc <= 1) {
