@@ -854,14 +854,12 @@ void get_packet_info(struct packet_info *packet, struct sk_buff *skb, bool in)
 
   if (packet->ip_header->protocol == UDP) {
     packet->proto = UDP;
-    packet->udp_header = (struct udphdr *)(skb_transport_header(skb)+20);
+    packet->udp_header = (struct udphdr *)skb_transport_header(skb);
     packet->src_port = (unsigned int)ntohs(packet->udp_header->source);
-    printk(KERN_INFO "src port: %u\n", packet->udp_header->source);
     packet->dest_port = (unsigned int)ntohs(packet->udp_header->dest);
-    printk(KERN_INFO "dest port: %u\n", packet->udp_header->dest);
   } else if (packet->ip_header->protocol == TCP) {
     packet->proto = TCP;
-    packet->tcp_header = (struct tcphdr *)(skb_transport_header(skb)+20);
+    packet->tcp_header = (struct tcphdr *)skb_transport_header(skb);
     packet->src_port = (unsigned int)ntohs(packet->tcp_header->source);
     packet->dest_port = (unsigned int)ntohs(packet->tcp_header->dest);
   } else if (packet->ip_header->protocol == ICMP) {
