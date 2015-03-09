@@ -762,30 +762,30 @@ static int classificate(struct packet_info *packet, bool in)
     i++;
     //rule = list_entry(p, struct fw_rule, list);
 
-    printk(KERN_INFO "trying to apply rule %d\n", rule->num);
+    //printk(KERN_INFO "trying to apply rule %d\n", rule->num);
     if (rule->src_ip_any) {
       /* rule doesn't specify IPv4 address */
     } else {
       if (rule->src_ip != packet->src_ip) {
         /* rule's src IPv4 doesn't match packet's IPv4, try next rule */
-        printk(KERN_INFO "src IP didn't matched\n");
+        //printk(KERN_INFO "src IP didn't matched\n");
         continue;
       } else {
-        printk(KERN_INFO "MATCH src IP: %d == %d?\n", rule->src_ip, packet->src_ip);
+        //printk(KERN_INFO "MATCH src IP: %d == %d?\n", rule->src_ip, packet->src_ip);
       }
 
     }
 
     if (rule->dest_ip_any) {
       /* rule doesn't specify IPv4 address */
-      printk(KERN_INFO "dest IP: any\n");
+      //printk(KERN_INFO "dest IP: any\n");
     } else {
       if (rule->dest_ip != packet->dest_ip) {
         /* rule's dest IPv4 doesn't match packet's IPv4, try next rule */
-        printk(KERN_INFO "dest IP didn't matched\n");
+        //printk(KERN_INFO "dest IP didn't matched\n");
         continue;
       } else {
-        printk(KERN_INFO "MATCH: dest IP: %d == %d?\n", rule->dest_ip, packet->dest_ip);
+        //printk(KERN_INFO "MATCH: dest IP: %d == %d?\n", rule->dest_ip, packet->dest_ip);
       }
     }
 
@@ -795,33 +795,33 @@ static int classificate(struct packet_info *packet, bool in)
       if (rule->src_port != packet->src_port) {
         /* rule's source port doesn't match packet's packet's source port, 
          * try next rule */
-        printk(KERN_INFO "src port didn't matched\n");
+        //printk(KERN_INFO "src port didn't matched\n");
         continue;
       } else {
-        printk(KERN_INFO "MATCH: src port: %d == %d?\n", rule->src_port, packet->src_port);
+        //printk(KERN_INFO "MATCH: src port: %d == %d?\n", rule->src_port, packet->src_port);
       }
     }
 
     if (rule->dest_port == 0) {
       /* rule doesn't specify source port */
     } else {
-      printk(KERN_INFO "dest port: %d == %d?\n", rule->dest_port, packet->dest_port);
+      //printk(KERN_INFO "dest port: %d == %d?\n", rule->dest_port, packet->dest_port);
       if (rule->dest_port != packet->dest_port) {
         /* rule's source port doesn't match packet's packet's source port, 
          * try next rule */
-        printk(KERN_INFO "dest port didn't matched\n");
+        //printk(KERN_INFO "dest port didn't matched\n");
         continue;
       } else {
-        printk(KERN_INFO "MATCH: dest port: %d == %d?\n", rule->dest_port, packet->dest_port);
+        //printk(KERN_INFO "MATCH: dest port: %d == %d?\n", rule->dest_port, packet->dest_port);
       }
     }
 
     if (rule->protocol != packet->proto) {
       /* rule's protocol doesn't match, try next rule */
-      printk(KERN_INFO "protocol didn't matched\n");
+      //printk(KERN_INFO "protocol didn't matched\n");
       continue;
     } else {
-      printk(KERN_INFO "MATCH protocol: %d == %d?\n", rule->protocol, packet->proto);
+      //printk(KERN_INFO "MATCH protocol: %d == %d?\n", rule->protocol, packet->proto);
     }
 
     /* the packet successfully passed the through the rule, do the action */
@@ -832,7 +832,7 @@ static int classificate(struct packet_info *packet, bool in)
   }
 
   /* default behaviour: allow the packet */
-  printk(KERN_INFO "Packet ALLOWED\n");
+  //printk(KERN_INFO "Packet ALLOWED\n");
   return NF_ACCEPT;
 }
 
@@ -852,12 +852,13 @@ void get_packet_info(struct packet_info *packet, struct sk_buff *skb, bool in)
   packet->src_ip = (unsigned int)packet->ip_header->saddr;
   packet->dest_ip = (unsigned int)packet->ip_header->daddr;
 
-  printk(KERN_INFO "protocol: %d\n", packet->ip_header->protocol);
   if (packet->ip_header->protocol == UDP) {
     packet->proto = UDP;
     packet->udp_header = (struct udphdr *)(skb_transport_header(skb)+20);
     packet->src_port = (unsigned int)ntohs(packet->udp_header->source);
+    printk(KERN_INFO "src port: %u\n", packet->udp_header->source);
     packet->dest_port = (unsigned int)ntohs(packet->udp_header->dest);
+    printk(KERN_INFO "dest port: %u\n", packet->udp_header->dest);
   } else if (packet->ip_header->protocol == TCP) {
     packet->proto = TCP;
     packet->tcp_header = (struct tcphdr *)(skb_transport_header(skb)+20);
@@ -869,10 +870,9 @@ void get_packet_info(struct packet_info *packet, struct sk_buff *skb, bool in)
     packet->proto = IP;
   }
 
-  printk(KERN_INFO "%s: %s from %pI4(%u) to %pI4(%u) src-port %u dst-port %u\n", 
+  printk(KERN_INFO "%s: %s from %pI4 to %pI4 src-port %u dst-port %u\n", 
       in_out_str(in), proto_ver(packet->proto), &packet->src_ip, 
-      packet->src_ip, &packet->dest_ip, packet->dest_ip, 
-      packet->src_port, packet->dest_port);
+      &packet->dest_ip, packet->src_port, packet->dest_port);
 }
 
 unsigned int hook_in_packet(const struct nf_hook_ops *ops, 
