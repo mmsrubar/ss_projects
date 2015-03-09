@@ -46,6 +46,7 @@ static struct nf_hook_ops nfho_out;
 
 static struct fw_rule policy_list;
 
+
 struct fw_rule {
   unsigned int num;
   bool src_ip_any;          /* true: source ip is set to any */
@@ -56,6 +57,7 @@ struct fw_rule {
   unsigned int dest_port;
   unsigned int protocol;  /* 1: tcp, 2: udp, 3: icmp, 4: ip */
   unsigned int action;    /* 1: allow, 2: deny */
+
   struct list_head list;
 };
 
@@ -260,11 +262,11 @@ int add_rule(
   }
 
   new->num = num;
-  if (!(new->src_ip_any = src_ip_any))     /* set the value first */
+  if (!(new->src_ip_any = src_ip_any))    /* set the value first */
     new->src_ip = ((tmp=ip_str_to_hl(src_ip))==0) ? 0 : ntohl(tmp);
-  if (!(new->dest_ip_any = dest_ip_any)) {  /* set the value first */
+  if (!(new->dest_ip_any = dest_ip_any))  /* set the value first */
     new->dest_ip = ((tmp=ip_str_to_hl(dest_ip))==0) ? 0 : ntohl(tmp);
-  }
+
   new->src_port = src_port;
   new->dest_port = dest_port;
   new->protocol = protocol;  /* 1: tcp, 2: udp, 3: icmp, 4: ip */
@@ -278,6 +280,156 @@ int add_rule(
 
   return 0;
 }
+
+/* @pos on the first call the value of pos will be zero, otherwise it represents
+ * a position of the item of your structure you should continue with */
+static void *ct_seq_start(struct seq_file *s, loff_t *pos)
+{
+  struct list_head *head = &(policy_list.list);
+
+  printk(KERN_INFO "Entering start(), pos = %Ld.\n", *pos);
+  printk(KERN_INFO "head = %p.\n", head);
+  printk(KERN_INFO "head->n = %p.\n", head->next);
+  printk(KERN_INFO "head = %p.\n", seq_list_start_head(head, *pos));
+
+  if (*pos != 0) {
+    return seq_list_start(head, *pos);
+    //return seq_list_next(v, &(policy_list.list), pos);
+  }
+  else if (seq_list_start(head, *pos) == NULL) {
+    /* pointing at head again, we're done with printing */
+    printk(KERN_INFO "Apparently, we're done.\n");
+    return NULL;
+  }
+
+  printk(KERN_INFO "returning pointer to head list: %p\n", &(policy_list.list));
+  return head->next;
+}
+
+/* @v   is a pointer returned from start() or next()
+ */
+static int ct_seq_show(struct seq_file *s, void *v)
+{
+  struct list_head *p;
+  struct fw_rule *rule;
+  char num[20];
+  char src_ip[20];
+  char dest_ip[20];
+  char src_port[6];
+  char dest_port[6];
+  int i;
+
+  p = (struct list_head *) v;
+  rule = list_entry(p, struct fw_rule, list);
+
+  sprintf(num, "%u", rule->num);
+
+  if (rule->src_ip_any) {
+    src_ip[0] = '*'; src_ip[1] = '\0';
+  } else {
+    sprintf(src_ip, "%pI4", &(rule->src_ip));
+  }
+
+  if (rule->dest_ip_any) {
+    dest_ip[0] = '*'; dest_ip[1] = '\0';
+  } else {
+    sprintf(dest_ip, "%pI4", &(rule->dest_ip));
+  }
+
+  if (rule->src_port == 0) {
+    sprintf(src_port, "*");
+  } else {
+    sprintf(src_port, "%u", rule->src_port);
+  }
+
+  if (rule->dest_port == 0) {
+    sprintf(dest_port, "*");
+  } else {
+    sprintf(dest_port, "%u", rule->dest_port);
+  }
+
+  seq_printf(s, "%s ", num);
+  for (i = 0; i < 6 - strlen(num); i++) {
+    seq_printf(s, " ");
+  }
+
+  if (rule->action == ALLOW) {
+    seq_printf(s, "%s  ", action_str(rule->action));
+  } else {
+    seq_printf(s, "%s   ", action_str(rule->action));
+  }
+
+  seq_printf(s, "%s ", src_ip);
+  for (i = 0; i < 15 - strlen(src_ip); i++) {
+    seq_printf(s, " ");
+  }
+
+  seq_printf(s, "%s ", src_port);
+  for (i = 0; i < 7 - strlen(src_port); i++) {
+    seq_printf(s, " ");
+  }
+      
+  seq_printf(s, "%s ", dest_ip);
+  for (i = 0; i < 15 - strlen(dest_ip); i++) {
+    seq_printf(s, " ");
+  }
+
+  seq_printf(s, "%s ", dest_port);
+  for (i = 0; i < 7 - strlen(dest_port); i++) {
+    seq_printf(s, " ");
+  }
+ 
+  seq_printf(s, "%s\n", proto_ver(rule->protocol));
+  return 0;
+}
+
+/* A mejor job of this routine is to detect when you have no data left to print
+ * and return NULL when that happens. If you're done, you have to bump up both
+ * the "offset" and the corresponding object pointer value.
+ */
+static void *ct_seq_next(struct seq_file *s, void *v, loff_t *pos)
+{
+  printk(KERN_INFO "In next(), v = %pX, pos = %Ld.\n", v, *pos);
+
+  if (&(policy_list.list) == seq_list_start(&(policy_list.list), *pos)) {
+    return NULL;
+  }
+
+  /* it will increment the pos for me */
+	v = seq_list_next(v, &(policy_list.list), pos);
+  return v;
+}
+
+/* Clean up and release all system resources that might have been allocated.
+ * This might NOT BE THE END of all printing. Instead your stop routine might
+ * have benn invoked simply because you were about to exceed that page limit, at
+ * which point your sequence file is "stopped", then restarted with the current
+ * offset so that you can pick up where you left off (so if will call the
+ * start() again).
+ */
+static void ct_seq_stop(struct seq_file *s, void *v)
+{
+  printk(KERN_INFO "Entering stop().\n");
+
+  if (v) {
+    printk(KERN_INFO "v is %pX.\n", v);
+  } else {
+    printk(KERN_INFO "v is null.\n");
+  }
+}
+
+static struct seq_operations ct_seq_ops = {
+  .start = ct_seq_start,
+  .next = ct_seq_next,
+  .stop = ct_seq_stop,
+  .show = ct_seq_show
+};
+
+static int ct_open(struct inode *inode, struct file *file)
+{
+  return seq_open(file, &ct_seq_ops);
+}
+
 
 /* This func is called every time somebody will try to read from the PROCF_NAME
  * file. Proc files is used to give a user rules that the firewall currently
@@ -311,7 +463,7 @@ static ssize_t procRead(struct file *fp, char *buffer, size_t len,
       finished = 1;
 
       /* id */
-      printk(KERN_INFO "reading rule id=%s\n", rule->num);
+      printk(KERN_INFO "reading rule id=%u\n", rule->num);
       sprintf(token, "%u", rule->num);
       add_token_to_buf(&procf_buffer_pos, token, " ");
       for (i = 0; i < 6 - strlen(token); i++) {
@@ -555,7 +707,7 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
     }
 
     if (rule_complete) {
-      printk(KERN_INFO "RULE: %d %s %s from %s to %s src-port %u dest-port %u\n", 
+      printk(KERN_INFO "ADD RULE: %d %s %s from %s to %s src-port %u dest-port %u\n", 
                         num, action_str(action), proto_ver(protocol), src_ip, 
                         dest_ip, src_port, dest_port);
 
@@ -717,9 +869,10 @@ void get_packet_info(struct packet_info *packet, struct sk_buff *skb, bool in)
     packet->proto = IP;
   }
 
-  printk(KERN_INFO "%s: %s from %pI4 to %pI4 src-port %u dst-port %u\n", 
+  printk(KERN_INFO "%s: %s from %pI4(%u) to %pI4(%u) src-port %u dst-port %u\n", 
       in_out_str(in), proto_ver(packet->proto), &packet->src_ip, 
-      &packet->dest_ip, packet->src_port, packet->dest_port);
+      packet->src_ip, &packet->dest_ip, packet->dest_ip, 
+      packet->src_port, packet->dest_port);
 }
 
 unsigned int hook_in_packet(const struct nf_hook_ops *ops, 
@@ -759,7 +912,6 @@ unsigned int hook_out_packet(const struct nf_hook_ops *ops,
   return classificate(&packet, false);
 } 
 
-
 /* Initialization routine */
 int init_module()
 {
@@ -778,9 +930,14 @@ int init_module()
   procf_buffer = (char *) vmalloc(PROCF_MAX_SIZE);
 
   /* inicialize operations for my proc file */
-  procFops.open = procOpen;
-  procFops.release = procClose;
-  procFops.read = procRead;
+  //procFops.open = procOpen;
+  //
+  procFops.open = ct_open;
+  procFops.read = seq_read;
+  procFops.llseek = seq_lseek;
+  procFops.release = seq_release;
+  //procFops.release = procClose;
+  //procFops.read = procRead;
   procFops.write = procWrite;
 
   mf_proc_file = proc_create(PROCF_NAME, 0644, NULL, &procFops);
