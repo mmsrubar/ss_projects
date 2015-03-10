@@ -229,9 +229,9 @@ int add_rule(
              unsigned int dest_port)
 {
   unsigned int tmp;
-  struct fw_rule *rule;
-  struct fw_rule *new;
   struct list_head *pos;
+  struct fw_rule *rule;
+  struct fw_rule *new = NULL;
   bool ftail = false;
 
   /* We want to keed the IDs in the list ordered. Find a rule with a first
@@ -243,8 +243,20 @@ int add_rule(
       /* put new rule in front of the pos */
       break;
     } else if (rule->num == num) {
-      printk(KERN_INFO "Rule with id=%d already exist\n", rule->num);
-      return 1;
+      printk(KERN_INFO "Updating rule with id=%d\n", rule->num);
+
+      /* very ugly but fast solution */
+      rule->num = num;
+      if (!(rule->src_ip_any = src_ip_any))    /* set the value first */
+        rule->src_ip = ((tmp=ip_str_to_hl(src_ip))==0) ? 0 : ntohl(tmp);
+      if (!(rule->dest_ip_any = dest_ip_any))  /* set the value first */
+        rule->dest_ip = ((tmp=ip_str_to_hl(dest_ip))==0) ? 0 : ntohl(tmp);
+
+      rule->src_port = src_port;
+      rule->dest_port = dest_port;
+      rule->protocol = protocol;  /* 1: tcp, 2: udp, 3: icmp, 4: ip */
+      rule->action = action;
+      return 0;
     } else {
       /* adding a rule with highest ID -> has to be added to the end of the list
        * */
@@ -252,9 +264,11 @@ int add_rule(
     }
   }
 
-  /* correct the pos pointer if the list is empty */
-  if (pos == policy_list.list.next)
+  /* correct the pos pointer if the list is empty and alocate new item */
+  if (pos == policy_list.list.next) {
+    printk(KERN_INFO "list is empty\n");
     pos = &policy_list.list;
+  }
 
   new = kmalloc(sizeof(*new), GFP_KERNEL);
   if (new == NULL) {
@@ -273,8 +287,10 @@ int add_rule(
   new->action = action;
 
   if (ftail) {
+    printk(KERN_INFO "Adding new rule to the tail of the list.\n");
     list_add_tail(&(new->list), pos);
   } else {
+    printk(KERN_INFO "Adding new rule.\n");
     list_add(&(new->list), pos);
   }
 
