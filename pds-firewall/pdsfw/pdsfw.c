@@ -3,6 +3,12 @@
  * Author:      Michal Srubar, xsruba03@stud.fit.vutbr.cz
  * Date:        Sun Mar  1 00:31:18 CET 2015
  * Description: 
+ * This is a kernel side for a simple firewall. It was created as a school project
+ * for PDS seminar. The following article was used a tutorial for this project:
+ * http://www.roman10.net/a-linux-firewall-using-netfilter-part-1overview/. The
+ * module stores firewall policy in a linux linked list and uses /proc file for
+ * communication with client application.
+ *
  */
 
 /* FIXME change num to id .. */

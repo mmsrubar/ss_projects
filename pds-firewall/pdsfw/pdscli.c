@@ -4,7 +4,7 @@
  * Date:        Sun Mar  1 00:31:18 CET 2015
  *
  * Description: 
- * This is a client side for simple firewall. It was created as a school project
+ * This is a client side for a simple firewall. It was created as a school project
  * for PDS seminar. The following article was used a tutorial for this project:
  * http://www.roman10.net/a-linux-firewall-using-netfilter-part-1overview/
  *
