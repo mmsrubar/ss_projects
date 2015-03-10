@@ -784,6 +784,14 @@ static int classificate(struct packet_info *packet, bool in)
     i++;
     //rule = list_entry(p, struct fw_rule, list);
 
+    if (rule->protocol != packet->proto) {
+      /* rule's protocol doesn't match, try next rule */
+      //printk(KERN_INFO "protocol didn't matched\n");
+      continue;
+    } else {
+      //printk(KERN_INFO "MATCH protocol: %d == %d?\n", rule->protocol, packet->proto);
+    }
+
     //printk(KERN_INFO "trying to apply rule %d\n", rule->num);
     if (rule->src_ip_any) {
       /* rule doesn't specify IPv4 address */
@@ -836,14 +844,6 @@ static int classificate(struct packet_info *packet, bool in)
       } else {
         //printk(KERN_INFO "MATCH: dest port: %d == %d?\n", rule->dest_port, packet->dest_port);
       }
-    }
-
-    if (rule->protocol != packet->proto) {
-      /* rule's protocol doesn't match, try next rule */
-      //printk(KERN_INFO "protocol didn't matched\n");
-      continue;
-    } else {
-      //printk(KERN_INFO "MATCH protocol: %d == %d?\n", rule->protocol, packet->proto);
     }
 
     /* the packet successfully passed the through the rule, do the action */
