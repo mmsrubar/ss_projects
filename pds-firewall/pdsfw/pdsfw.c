@@ -26,9 +26,6 @@
  
 #define PROCF_NAME "pdsfw_xsruba03"
 #define PROCF_MAX_SIZE  128
-//#define PROCF_MAX_SIZE  512
-//#define PROCF_MAX_SIZE  1024
-//#define PROCF_MAX_SIZE  25
 
 #define proto_ver(x) (x == UDP) ? "udp" : ((x==TCP) ? "tcp" : \
     ((x==ICMP) ? "icmp" : "ip"))
@@ -47,11 +44,15 @@ MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("PDS firewall");
 MODULE_AUTHOR("Michal Srubar, xsruba03@stud.fit.vutbr.cz");
 
+enum fw_rule_fields {
+  NUM, ACTION, PROTOCOL, FROM, SRC_IP, TO, DEST_IP, 
+  SRC_PORT_STR, SRC_PORT, DEST_PORT_STR, DEST_PORT
+};
+
 static struct nf_hook_ops nfho_in;
 static struct nf_hook_ops nfho_out;
-
 static struct fw_rule policy_list;
-
+static struct proc_dir_entry *mf_proc_file;
 
 struct fw_rule {
   unsigned int num;
@@ -77,11 +78,6 @@ struct packet_info {
   unsigned int dest_port;
   int proto;
 };
-
-//the structure used for procfs
-static struct proc_dir_entry *mf_proc_file;
-unsigned long procf_buffer_pos;
-char *procf_buffer;
 
 unsigned int str_to_uint(char *str)
 {
@@ -179,14 +175,6 @@ void ip_hl_to_str(unsigned int ip, char *ip_str)
     ip_array[3] = (ip_array[3] | ip);
 
     sprintf(ip_str, "%u.%u.%u.%u", ip_array[0], ip_array[1], ip_array[2], ip_array[3]);
-}
-
-void add_token_to_buf(unsigned long *procf_buffer_pos, char token[], char *e)
-{
-  memcpy(procf_buffer + *procf_buffer_pos, token, strlen(token));
-  *procf_buffer_pos += strlen(token);
-  memcpy(procf_buffer + *procf_buffer_pos, e, strlen(e));  /* add extra space */
-  (*procf_buffer_pos)++;
 }
 
 struct fw_rule *get_item_by_id(int id)
@@ -451,121 +439,6 @@ static int ct_open(struct inode *inode, struct file *file)
 {
   return seq_open(file, &ct_seq_ops);
 }
-
-
-/* This func is called every time somebody will try to read from the PROCF_NAME
- * file. Proc files is used to give a user rules that the firewall currently
- * use.
- *
- * FIXME: you can't write more then 4096B (page size) ! you have to use seq
- * files for that!
- */
-static ssize_t procRead(struct file *fp, char *buffer, size_t len, 
-                        loff_t *offset)
-{
-  static int finished = 0;
-  int ret;
-  struct fw_rule *rule;
-  char token[20] = {[20-1] = '\0'};
-  int i;
-
-  printk(KERN_INFO "procf_read (/proc/%s) called \n", PROCF_NAME);
-
-  if (finished) {
-    printk(KERN_INFO "finished is 1, nothing to read\n");
-    finished = 0;
-    return 0;
-  } else {
-    procf_buffer_pos = 0;
-    ret = 0;
-
-    printk(KERN_INFO "starting reading rules from the list\n");
-    list_for_each_entry(rule, &policy_list.list, list) {
-
-      finished = 1;
-
-      /* id */
-      printk(KERN_INFO "reading rule id=%u\n", rule->num);
-      sprintf(token, "%u", rule->num);
-      add_token_to_buf(&procf_buffer_pos, token, " ");
-      for (i = 0; i < 6 - strlen(token); i++) {
-        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
-      }
-
-      /* action */
-      strcpy(token, action_str(rule->action));
-      add_token_to_buf(&procf_buffer_pos, token, " ");
-      if (rule->action == ALLOW) {
-        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
-      } else {
-        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
-        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
-      }
-
-      /* src ip */
-      if (rule->src_ip_any) {
-        strcpy(token, "*");
-      } else {
-        ip_hl_to_str(rule->src_ip, token);
-      } 
-      add_token_to_buf(&procf_buffer_pos, token, " ");
-      for (i = 0; i < 15 - strlen(token); i++) {
-        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
-      }
-
-      /* src port */
-      if (rule->src_port == 0) {
-        sprintf(token, "*");
-      } else {
-        sprintf(token, "%u", rule->src_port);
-      }
-      add_token_to_buf(&procf_buffer_pos, token, " ");
-      for (i = 0; i < 7 - strlen(token); i++) {
-        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
-      }
-
-      /* dest ip */
-      if (rule->dest_ip_any) {
-        strcpy(token, "*");
-      } else {
-        ip_hl_to_str(rule->dest_ip, token);
-      } 
-      add_token_to_buf(&procf_buffer_pos, token, " ");
-      for (i = 0; i < 15 - strlen(token); i++) {
-        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
-      }
-
-      /* dest port */
-      if (rule->dest_port == 0) {
-        sprintf(token, "*");
-      } else {
-        sprintf(token, "%u", rule->dest_port);
-      }
-      add_token_to_buf(&procf_buffer_pos, token, " ");
-      for (i = 0; i < 7 - strlen(token); i++) {
-        memcpy(procf_buffer + procf_buffer_pos, " ", 1); procf_buffer_pos++;
-      }
-
-      /* protocol */
-      strcpy(token, proto_ver(rule->protocol));
-      add_token_to_buf(&procf_buffer_pos, token, "\n");
-
-      printk(KERN_INFO "procf_buffer_pos: %lu\n", procf_buffer_pos);
-    }
-
-    printk(KERN_INFO "procf_buffer_pos: %lu\n", procf_buffer_pos);
-    memcpy(buffer, procf_buffer, procf_buffer_pos);
-    ret = procf_buffer_pos;
-  }
-
-  /* you need to return how many bytes did you write into the buffer */
-  return ret;
-}
- 
-static unsigned long procfs_buffer_size = 0;
-static char procfs_buffer[PROCF_MAX_SIZE];
-
-enum fw_rule_fields {NUM, ACTION, PROTOCOL, FROM, SRC_IP, TO, DEST_IP, SRC_PORT_STR, SRC_PORT, DEST_PORT_STR, DEST_PORT};
  
 /* If the file is not big enough then this func is called more than once. For
  * example if the file is 32B long and a user write 64B to the file then this
@@ -577,6 +450,8 @@ static ssize_t procWrite(struct file *file, const char *buffer, size_t count, lo
   static int j = 0;
   static enum fw_rule_fields type = NUM;
   static bool rule_complete = false;
+  static unsigned long procfs_buffer_size = 0;
+  static char procfs_buffer[PROCF_MAX_SIZE];
 
   int read_again = false;
   int i;
@@ -908,13 +783,6 @@ unsigned int hook_in_packet(const struct nf_hook_ops *ops,
 
   /* classificat the incoming packet */
   return classificate(&packet, false);
-  /*
-  if (classificate(&packet, false) == DENY) {
-    return NF_DROP;
-  }
-
-  return NF_ACCEPT;                
-  */
 }
 
 unsigned int hook_out_packet(const struct nf_hook_ops *ops, 
@@ -941,23 +809,14 @@ int init_module()
   /* inicialize the list of firewall rules */
   INIT_LIST_HEAD(&(policy_list.list));
   /*
-  add_rule(1, DENY, ICMP, "127.0.0.1", NULL, false, true, 0, 0);
-  add_rule(20, DENY, ICMP, "192.168.0.1", NULL, false, true, 0, 0);
   add_rule(30, ALLOW, ICMP, "192.168.123.123", "192.168.123.123", false, false, 65535, 65535);
-  add_rule(15, ALLOW, TCP, NULL, "192.168.0.1", true, false, 0, 0);
   */
 
-  procf_buffer = (char *) vmalloc(PROCF_MAX_SIZE);
-
   /* inicialize operations for my proc file */
-  //procFops.open = procOpen;
-  //
   procFops.open = ct_open;
   procFops.read = seq_read;
   procFops.llseek = seq_lseek;
   procFops.release = seq_release;
-  //procFops.release = procClose;
-  //procFops.read = procRead;
   procFops.write = procWrite;
 
   mf_proc_file = proc_create(PROCF_NAME, 0644, NULL, &procFops);
