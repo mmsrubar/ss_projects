@@ -11,7 +11,6 @@
  *
  */
 
-/* FIXME change num to id .. */
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/proc_fs.h>
@@ -729,7 +728,7 @@ static int classificate(struct packet_info *packet, bool in)
   }
 
   /* default behaviour: allow the packet */
-  //printk(KERN_INFO "Packet ALLOWED\n");
+  printk(KERN_INFO "Packet ALLOWED\n");
   return NF_ACCEPT;
 }
 

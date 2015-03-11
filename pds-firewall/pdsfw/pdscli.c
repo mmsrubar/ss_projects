@@ -69,7 +69,7 @@ void usage()
 This is a user space command line application for a simple firewall. It\n\
 communicates with a kernel module through the /proc file system. Kernel \n\
 module provides packet classification based on rules which can be specified\n\
-with this utility.\n", stdout);
+with this utility.\n\n", stdout);
 
   printf("Usage: %s [options] [filter]\n", program_name);
 
