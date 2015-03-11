@@ -1,1 +1,1 @@
-awk '{printf %d deny %sn, NR, bash}' 
+awk '{print NR  " deny " $0 }' out >final
