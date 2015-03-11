@@ -15,6 +15,7 @@
 \newcommand{\myUrl}[1]{{\color{blue}{#1}}}
 \newcommand{\myuv}[1]{\quotedblbase #1\textquotedblleft}
 \newcommand{\tab}[1]{\hspace{.2\textwidth}\rlap{#1}}
+\newcommand{\bigO}{\ensuremath{\mathcal{O}}}%
 
 \author{Michal Šrubař\\xsruba03@stud.fit.vutbr.cz}
 % date s prazdnym argumentem zpusobi neuvedeni date v titulku
@@ -202,6 +203,15 @@ dimenze pravidel jsou porovnávány v~následujícím pořadí:
   \item zdrojový port,
   \item cílový port.
 \end{enumerate}
+
+Časová složitost vyhledávání v~takto zvolené datové struktuře samozdřejmě není
+nejslepší. Označme \textit{l} jako počet pravidel v~seznamu a \textit{d} jako
+počet porovnávaných hodnot každé položky, poté časová složitost vyhledávání bude
+v~nejhorším případě \bigO \textit{(l*d)}, což se blíží kvadratické složitosti.
+S~využitím lepší datových struktur a algoritmů jako je například stromové
+vyhledávání\footnote{tries, grid of tries} by bylo možné dosáhnout složitosti
+časové složitosti \bigO \textit{n*log(n)}.
+
 
 
 %\section{Instalace}
