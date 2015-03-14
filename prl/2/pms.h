@@ -21,9 +21,14 @@
   tmp = NULL;
 
 #define TAILQ_FREE_ENTIRE_ITEM(queue, member) \
-  TAILQ_REMOVE(&queue, member, entries);      \
+  TAILQ_REMOVE((&queue), member, entries);    \
     free(member->item);                       \
     free(member);                             \
+
+#define QUEUE_UP_FINAL(val, seq, qitem)             \
+  qitem = create_qitem(create_mpi_item(val, seq));  \
+  TAILQ_INSERT_TAIL(&final, qitem, entries);
+ 
 
 #define set_queue_with_lower_seq(queue, id) \
   if (TAILQ_EMPTY(&up)) {\
@@ -42,6 +47,10 @@
 
 #define RECV_INFO(id, val, seq) {\
   DPRINT("P%d: Receiving: val=%d, seq=%d\n", id, val, seq); \
+}
+
+#define SEND_INFO(myid, val, seq) { \
+  DPRINT("P%d-->P%d: Sending: val=%d, seq=%d \n", myid, 1, val, seq); \
 }
 
 #define NEW_SEQ_FLAG_INFO(flag, id, val) {\

@@ -158,20 +158,12 @@ MPI_Item *get_greater_item()
 
   if (first_up->item->val > first_down->item->val) {
     greater = create_mpi_item(first_up->item->val, first_up->item->seq);
-    DPRINT("Value in UP queue is greater (removing val=%d\n", first_up->item->val);
+    DPRINT("Value in UP queue is greater (removing val=%d\n)", first_up->item->val);
     TAILQ_FREE_ENTIRE_ITEM(up, first_up);
-
-    /*
-    TAILQ_REMOVE(&up, first_up, entries);
-    free(first_up->item);
-    free(first_up);
-    */
   } else {
     greater = create_mpi_item(first_down->item->val, first_down->item->seq);
-    DPRINT("Value in DOWN queue is greater (removing val=%d\n", first_down->item->val);
-    TAILQ_REMOVE(&down, first_down, entries);
-    free(first_down->item);
-    free(first_down);
+    DPRINT("Value in DOWN queue is greater (removing val=%d\n)", first_down->item->val);
+    TAILQ_FREE_ENTIRE_ITEM(down, first_down);
   }
   return greater;
 }
@@ -251,8 +243,8 @@ int main(int argc, char *argv[])
 
       send = create_mpi_item(c, cur_seq);
       cur_seq++;
-      DPRINT("P%d-->P%d: Sending: val=%d, seq=%d \n", myid, 1, send->val, send->seq);
-      MPI_Send(send, 1, mpi_qitem, 1, TAG, MPI_COMM_WORLD);
+      MPI_Send(send, 1, mpi_qitem, 1, TAG, MPI_COMM_WORLD); 
+      SEND_INFO(myid, send->val, send->seq);
 
       /* wait for response */
       MPI_Recv(&res, 1, MPI_INT, 1, TAG, MPI_COMM_WORLD, &status);
@@ -295,6 +287,8 @@ int main(int argc, char *argv[])
       queues_print(myid);
 
       if ( compare_condition() ) {
+        /* COMPARE CONDITION: The processor has enough item in its input queues
+         * so it can compare them. */
 
         DPRINT("P%d: Comparing condition\n", myid);
         /* First two items in UP and DOWN queues are of the same sequence so we
@@ -302,15 +296,12 @@ int main(int argc, char *argv[])
         send = get_greater_item();
 
         if (myid == numprocs-1) {
-          //printf("FINAL(1) = %d\n", send->val);
-          i = create_mpi_item(send->val, send->seq);
-          qi = create_qitem(i);
-          TAILQ_INSERT_TAIL(&final, qi, entries);
+          QUEUE_UP_FINAL(send->val, send->seq, qi);
         } else {
           /* send the greater one to the right */
-          DPRINT("P%d-->P%d: Sending: val=%d, seq=%d\n", 
-                 myid, myid+1, send->val, send->seq);
           MPI_Send(send, 1, mpi_qitem, myid+1, TAG, MPI_COMM_WORLD);
+          SEND_INFO(myid, send->val, send->seq);
+
           MPI_Recv(&res, 1, MPI_INT, myid+1, TAG, MPI_COMM_WORLD, &status);
           DPRINT("P%d<--P%d: ACK: val=%d, seq=%d\n",
                  myid, myid+1, send->val, send->seq);
@@ -337,22 +328,19 @@ int main(int argc, char *argv[])
 
           if (tmp_seq == tmp->item->seq) {
             if (myid == numprocs-1) {
-              i = create_mpi_item(tmp->item->val, tmp->item->seq);
-              qi = create_qitem(i);
-              TAILQ_INSERT_TAIL(&final, qi, entries);
+              QUEUE_UP_FINAL(tmp->item->val, tmp->item->seq, qi);
             } else {
               DPRINT("P%d-->P%d: Sending: val=%d, seq=%d\n", 
                  myid, myid+1, tmp->item->val, tmp->item->seq);
               MPI_Send(create_mpi_item(tmp->item->val, tmp->item->seq), 
                      1, mpi_qitem, myid+1, TAG, MPI_COMM_WORLD);
+
               MPI_Recv(&res, 1, MPI_INT, myid+1, TAG, MPI_COMM_WORLD, &status);
               DPRINT("P%d<--P%d: ACK: val=%d, seq=%d\n", 
                  myid, myid+1, tmp->item->val, tmp->item->seq);
             }
 
-            TAILQ_REMOVE(queue, tmp, entries);  // FIXME: free
-            free(tmp->item);
-            free(tmp);
+            TAILQ_FREE_ENTIRE_ITEM(*queue, tmp);
             n--;
           } else {
             DPRINT("P%d: DALSI PRVEK uz ma jine seq\n", myid);
@@ -388,11 +376,7 @@ int main(int argc, char *argv[])
               if (tmp_seq == tmp->item->seq) {
 
                 if (myid == numprocs-1) {
-                  //printf("FINAL(3) = %d\n", tmp->item->val);
-
-                  i = create_mpi_item(tmp->item->val, tmp->item->seq);
-                  qi = create_qitem(i);
-                  TAILQ_INSERT_TAIL(&final, qi, entries);
+                  QUEUE_UP_FINAL(tmp->item->val, tmp->item->seq, qi);
                 } else {
                   DPRINT("P%d-->P%d: Sending: val=%d, seq=%d\n", 
                      myid, myid+1, tmp->item->val, tmp->item->seq);
@@ -403,9 +387,7 @@ int main(int argc, char *argv[])
                      myid, myid+1, tmp->item->val, tmp->item->seq);
                 }
    
-                TAILQ_REMOVE(queue, tmp, entries);
-                free(tmp->item);
-                free(tmp);
+                TAILQ_FREE_ENTIRE_ITEM(*queue, tmp);
                 n--;
 
               } else {
@@ -426,16 +408,12 @@ int main(int argc, char *argv[])
 
     /* Free the entire UP queue  */
     while (iterator = TAILQ_FIRST(&up)) {
-      TAILQ_REMOVE(&up, iterator, entries);
-      free(iterator->item);
-      free(iterator);
+      TAILQ_FREE_ENTIRE_ITEM(up, iterator);
     }
 
     /* Free the entire UP queue  */
     while (iterator = TAILQ_FIRST(&down)) {
-      TAILQ_REMOVE(&down, iterator, entries);
-      free(iterator->item);
-      free(iterator);
+      TAILQ_FREE_ENTIRE_ITEM(down, iterator);
     }
 
     if (myid == numprocs-1) {
@@ -445,9 +423,7 @@ int main(int argc, char *argv[])
 
       /* Free the entire tail queue  */
       while (iterator = TAILQ_FIRST(&final)) {
-        TAILQ_REMOVE(&final, iterator, entries);
-        free(iterator->item);
-        free(iterator);
+        TAILQ_FREE_ENTIRE_ITEM(final, iterator);
       }
     }
        
