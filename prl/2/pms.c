@@ -110,13 +110,13 @@ void queues_print(int id)
  * @cur_up_down   Index of queue we work with (can be UP or DOWN).
  * @cur_seq       Current sequence number.
  * @last_seq      The sequence number of previous received item.
- * @new_seq_flag  Is the received item from new sequence?
+ * @new_seq       Is the received item from new sequence?
  */
 void place_received_item(MPI_Item *recv, 
                          int *cur_up_down, 
                          unsigned int *cur_seq,
                          unsigned int *last_seq, 
-                         bool *new_seq_flag)
+                         bool *new_seq)
 {
   QItem *new = create_qitem(recv);
 
@@ -139,7 +139,7 @@ void place_received_item(MPI_Item *recv,
       *cur_up_down = UP;
       *last_seq = recv->seq;
       queue_up(UP, new);
-      *new_seq_flag = true;
+      *new_seq = true;
       *cur_seq = recv->seq;
     }
   }
@@ -201,7 +201,7 @@ int main(int argc, char *argv[])
   unsigned int cur_seq = 0;      /* what sequence does the process work with */
   unsigned int last_seq = 0;
   int tmp_seq;
-  bool new_seq_flag = false;
+  bool new_seq = false;
 
   MPI_Init(&argc, &argv);
   MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
@@ -261,7 +261,7 @@ int main(int argc, char *argv[])
     cur_up_down = UP;
     cur_seq = 0;
     last_seq = 0;
-    new_seq_flag = false;
+    new_seq = false;
     res = 1;
     n = pow(2, (numprocs-1));   /* count the number of input numbers */
 
@@ -277,9 +277,9 @@ int main(int argc, char *argv[])
         MPI_Recv(&recv, 1, mpi_qitem, myid-1, TAG, MPI_COMM_WORLD, &status); RECV_INFO(myid, recv.val, recv.seq);
         MPI_Send(&res, 1, MPI_INT, myid-1, TAG, MPI_COMM_WORLD);
         
-        place_received_item(&recv, &cur_up_down, &cur_seq, &last_seq, &new_seq_flag);
+        place_received_item(&recv, &cur_up_down, &cur_seq, &last_seq, &new_seq);
 
-        NEW_SEQ_FLAG_INFO(new_seq_flag, myid, recv.val);
+        NEW_SEQ_FLAG_INFO(new_seq, myid, recv.val);
       } else {
         DPRINT("P%d: Skip receiving another item ...\n", myid);
       }
@@ -306,50 +306,9 @@ int main(int argc, char *argv[])
           DPRINT("P%d<--P%d: ACK: val=%d, seq=%d\n",
                  myid, myid+1, send->val, send->seq);
         }
-        new_seq_flag = false;
+        new_seq = false;
         n--;
         DPRINT("P%d: WHILE CONTINUE(compare)\n", myid);
-        continue;
-      } 
-      else if (new_seq_flag)
-      {
-        DPRINT("P%d: New sequence condition\n", myid);
-        /* This will set the queue pointer to UP or DOWN queue base on in witch
-         * the first item has lower sequnce number */
-        set_queue_with_lower_seq(queue, myid);
-
-        /* all items with this seq number will be send */
-        tmp_seq = TAILQ_FIRST(queue)->item->seq;
-        DPRINT("P%d: Send all items with seq=%d\n", myid, tmp_seq);
-
-
-        tmp = TAILQ_FIRST(queue);
-        for (tmp; tmp != NULL; tmp = TAILQ_FIRST(queue)) {
-
-          if (tmp_seq == tmp->item->seq) {
-            if (myid == numprocs-1) {
-              QUEUE_UP_FINAL(tmp->item->val, tmp->item->seq, qi);
-            } else {
-              DPRINT("P%d-->P%d: Sending: val=%d, seq=%d\n", 
-                 myid, myid+1, tmp->item->val, tmp->item->seq);
-              MPI_Send(create_mpi_item(tmp->item->val, tmp->item->seq), 
-                     1, mpi_qitem, myid+1, TAG, MPI_COMM_WORLD);
-
-              MPI_Recv(&res, 1, MPI_INT, myid+1, TAG, MPI_COMM_WORLD, &status);
-              DPRINT("P%d<--P%d: ACK: val=%d, seq=%d\n", 
-                 myid, myid+1, tmp->item->val, tmp->item->seq);
-            }
-
-            TAILQ_FREE_ENTIRE_ITEM(*queue, tmp);
-            n--;
-          } else {
-            DPRINT("P%d: DALSI PRVEK uz ma jine seq\n", myid);
-            break;
-          }
-        }
-
-        new_seq_flag = false;
-        DPRINT("P%d: WHILE CONTINUE(new seq)\n", myid);
         continue;
       } 
       else {
@@ -357,49 +316,48 @@ int main(int argc, char *argv[])
         TAILQ_LENGTH(up_len, up, tmp, entries);
         TAILQ_LENGTH(down_len, down, tmp, entries);
 
-        if (up_len == n || down_len == n || up_len + down_len == n) {
+        if (new_seq || up_len==n || down_len==n || up_len+down_len==n) {
           /* no more items is comming so I have to send everything from UP and
            * DOWN queues from the smallest sequence numbers */
           
-          DPRINT("P%d: No more incoming items condition\n", myid);
+          DPRINT("P%d: No more incoming items or new seq condition\n", myid);
 
-          //while (!TAILQ_EMPTY(&up) || !TAILQ_EMPTY(&down)) {
-            DPRINT(">>>>>> REMOWING WHILE\n");
-            /* untion there is something in either UP or DOWN queue */
+          /* the first item has lower sequnce number */
+          set_queue_with_lower_seq(queue, myid);
+          /* all items with this seq number will be send */
+          tmp_seq = TAILQ_FIRST(queue)->item->seq;
+          DPRINT("P%d: Send all items with seq=%d\n", myid, tmp_seq);
 
-            set_queue_with_lower_seq(queue, myid);
-            tmp_seq = TAILQ_FIRST(queue)->item->seq;
+          tmp = TAILQ_FIRST(queue);
+          for (tmp; tmp != NULL; tmp = TAILQ_FIRST(queue)) {
 
-            tmp = TAILQ_FIRST(queue);
-            for (tmp; tmp != NULL; tmp = TAILQ_FIRST(queue)) {
+            if (tmp_seq == tmp->item->seq) {
 
-              if (tmp_seq == tmp->item->seq) {
-
-                if (myid == numprocs-1) {
-                  QUEUE_UP_FINAL(tmp->item->val, tmp->item->seq, qi);
-                } else {
-                  DPRINT("P%d-->P%d: Sending: val=%d, seq=%d\n", 
-                     myid, myid+1, tmp->item->val, tmp->item->seq);
-                  MPI_Send(create_mpi_item(tmp->item->val, tmp->item->seq), 
-                         1, mpi_qitem, myid+1, TAG, MPI_COMM_WORLD);
-                  MPI_Recv(&res, 1, MPI_INT, myid+1, TAG, MPI_COMM_WORLD, &status);
-                  DPRINT("P%d<--P%d: ACK: val=%d, seq=%d\n", 
-                     myid, myid+1, tmp->item->val, tmp->item->seq);
-                }
-   
-                TAILQ_FREE_ENTIRE_ITEM(*queue, tmp);
-                n--;
-
+              if (myid == numprocs-1) {
+                QUEUE_UP_FINAL(tmp->item->val, tmp->item->seq, qi);
               } else {
-                DPRINT("DALSI PRVEK uz ma jine seq\n");
-                break;
+                DPRINT("P%d-->P%d: Sending: val=%d, seq=%d\n", 
+                   myid, myid+1, tmp->item->val, tmp->item->seq);
+                MPI_Send(create_mpi_item(tmp->item->val, tmp->item->seq), 
+                       1, mpi_qitem, myid+1, TAG, MPI_COMM_WORLD);
+                MPI_Recv(&res, 1, MPI_INT, myid+1, TAG, MPI_COMM_WORLD, &status);
+                DPRINT("P%d<--P%d: ACK: val=%d, seq=%d\n", 
+                   myid, myid+1, tmp->item->val, tmp->item->seq);
               }
-            }
+ 
+              TAILQ_FREE_ENTIRE_ITEM(*queue, tmp);
+              n--;
 
-          new_seq_flag = false;
+            } else {
+              DPRINT("DALSI PRVEK uz ma jine seq\n");
+              break;
+            }
+          }
+
+          new_seq = false;
         } /* end last condition queue_len == N */
 
-        new_seq_flag = false;
+        new_seq = false;
       }
 
       DPRINT("P%d: WHILE AGAIN\n", myid);
