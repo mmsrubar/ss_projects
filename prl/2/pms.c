@@ -54,7 +54,7 @@ MPI_Item *create_mpi_item(unsigned int val, unsigned int seq)
   return new;
 }
 
-/* Create queue item from received item from MPI.
+/* Create queue item from sent/received item from MPI.
  * @item    An MPI_struct item.
  * @return  Pointer to a new queue item.
  */
@@ -75,7 +75,7 @@ QItem *create_qitem(MPI_Item *item)
   return new;
 }
 
-/* Put a received item into the right queue base on cur_up_down var.
+/* Put a received item into the corrent queue based on cur_up_down var.
  * @cur_up_down   Are we currently working with UP or DOWN queue?
  * @item          Received item from left processor.
  */
@@ -170,17 +170,19 @@ MPI_Item *get_greater_item()
   return greater;
 }
 
+/* Process can only work if this condition is true. Processor can compare two
+ * values from its input queues if there is value in both DOWN and UP queue a 
+ * the values are from the SAME sequence.
+ */
 bool compare_condition()
 {
   QItem *first_up = TAILQ_FIRST(&up);
   QItem *first_down = TAILQ_FIRST(&down);
 
-  if (!TAILQ_EMPTY(&up) && !TAILQ_EMPTY(&down) && (first_up->item->seq == first_down->item->seq)) {
+  if (!TAILQ_EMPTY(&up) && !TAILQ_EMPTY(&down) && (first_up->item->seq == first_down->item->seq))
     return true;
-  }
-  else {
+  else
     return false;
-  }
 }
 
 /**
@@ -197,37 +199,31 @@ void diff(struct timespec *start, struct timespec *end, struct timespec *temp) {
     }
 }
 
-
 int main(int argc, char *argv[])
 {
-static int ii = 10;
   int numprocs, n;      /* number of processes we work with */
   int myid;             /* ID of the processor */
   int c;                /* number from the file */
   int res;
 
-  struct timespec d;
-
+  FILE *f;
   MPI_Status status; 
   MPI_Item *send, recv, *i;
-
-  struct timespec ts;
+  QItem *iterator, *tmp, *qi;
   struct head *queue;
-  QItem *iterator, *tmp, *remove, *first_up, *first_down, *qi;
 
-  FILE *f;
   int up_len, down_len;
-
   int cur_up_down;  /* currently working with UP or DOWN queueu? */
   unsigned int cur_seq = 0;      /* what sequence does the process work with */
   unsigned int last_seq = 0;
-  int tmp_seq;
+  unsigned int tmp_seq;
   bool new_seq = false;
   bool measure = false;
 
   if (argc == 2 && (strcmp(argv[1], "-m") == 0)) {
     measure = true;
   }
+
   MPI_Init(&argc, &argv);
   MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
   MPI_Comm_rank(MPI_COMM_WORLD, &myid);
@@ -269,26 +265,22 @@ static int ii = 10;
       return 0;
     }
 
-    /* if the file contains only one value then there is nothing to sort */
     TAILQ_LENGTH(up_len, in, tmp, entries);
     if (up_len == 1) {
+      /* if the file contains only one value then there is nothing to sort */
       printf("%d\n", TAILQ_FIRST(&in)->item->val);
     } else {
-
       struct timespec time1;
+
       if (measure) {
         clock_gettime(CLOCK_REALTIME, &time1);
       }
 
       TAILQ_FOREACH(tmp, &in, entries) {
-        //DPRINT("|%d", tmp->item->val);
         send = create_mpi_item(tmp->item->val, cur_seq);
         cur_seq++;
         MPI_Send(send, 1, mpi_qitem, 1, TAG, MPI_COMM_WORLD); 
         SEND_INFO(myid, send->val, send->seq);
-
-        /* wait for response */
-        MPI_Recv(&res, 1, MPI_INT, 1, TAG, MPI_COMM_WORLD, &status);
       }
 
       if (measure) {
@@ -326,8 +318,6 @@ static int ii = 10;
       if ((up_len + down_len) != n) {
         MPI_Recv(&recv, 1, mpi_qitem, myid-1, TAG, MPI_COMM_WORLD, &status);
         RECV_INFO(myid, recv.val, recv.seq);
-        MPI_Send(&res, 1, MPI_INT, myid-1, TAG, MPI_COMM_WORLD);
-        
         place_received_item(&recv, &cur_up_down, &cur_seq, &last_seq, &new_seq);
         NEW_SEQ_FLAG_INFO(new_seq, myid, recv.val);
       } else {
@@ -341,21 +331,21 @@ static int ii = 10;
          * so it can compare them. */
 
         DPRINT("P%d: Comparing condition\n", myid);
+
         /* First two items in UP and DOWN queues are of the same sequence so we
          * can compare them. */
         send = get_greater_item();
 
         if (myid == numprocs-1) {
+          /* put the greater value into the final queue if I'm the last
+           * processor */
           QUEUE_UP_FINAL(send->val, send->seq, qi);
         } else {
           /* send the greater one to the right */
           MPI_Send(send, 1, mpi_qitem, myid+1, TAG, MPI_COMM_WORLD);
           SEND_INFO(myid, send->val, send->seq);
-
-          MPI_Recv(&res, 1, MPI_INT, myid+1, TAG, MPI_COMM_WORLD, &status);
-          DPRINT("P%d<--P%d: ACK: val=%d, seq=%d\n",
-                 myid, myid+1, send->val, send->seq);
         }
+
         new_seq = false;
         n--;
         DPRINT("P%d: WHILE CONTINUE(compare)\n", myid);
@@ -378,8 +368,8 @@ static int ii = 10;
           tmp_seq = TAILQ_FIRST(queue)->item->seq;
           DPRINT("P%d: Send all items with seq=%d\n", myid, tmp_seq);
 
-          tmp = TAILQ_FIRST(queue);
-          for (tmp; tmp != NULL; tmp = TAILQ_FIRST(queue)) {
+          
+          for (tmp=TAILQ_FIRST(queue); tmp != NULL; tmp = TAILQ_FIRST(queue)) {
 
             if (tmp_seq == tmp->item->seq) {
 
@@ -390,9 +380,6 @@ static int ii = 10;
                    myid, myid+1, tmp->item->val, tmp->item->seq);
                 MPI_Send(create_mpi_item(tmp->item->val, tmp->item->seq), 
                        1, mpi_qitem, myid+1, TAG, MPI_COMM_WORLD);
-                MPI_Recv(&res, 1, MPI_INT, myid+1, TAG, MPI_COMM_WORLD, &status);
-                DPRINT("P%d<--P%d: ACK: val=%d, seq=%d\n", 
-                   myid, myid+1, tmp->item->val, tmp->item->seq);
               }
  
               TAILQ_FREE_ENTIRE_ITEM(*queue, tmp);
@@ -426,12 +413,12 @@ static int ii = 10;
     }
  
     /* Free the entire UP queue  */
-    while (iterator = TAILQ_FIRST(&up)) {
+    while ((iterator = TAILQ_FIRST(&up))) {
       TAILQ_FREE_ENTIRE_ITEM(up, iterator);
     }
 
     /* Free the entire UP queue  */
-    while (iterator = TAILQ_FIRST(&down)) {
+    while ((iterator = TAILQ_FIRST(&down))) {
       TAILQ_FREE_ENTIRE_ITEM(down, iterator);
     }
 
@@ -441,7 +428,7 @@ static int ii = 10;
       }
 
       /* Free the entire tail queue  */
-      while (iterator = TAILQ_FIRST(&out)) {
+      while ((iterator = TAILQ_FIRST(&out))) {
         TAILQ_FREE_ENTIRE_ITEM(out, iterator);
       }
     }
