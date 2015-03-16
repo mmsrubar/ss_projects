@@ -13,6 +13,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/queue.h>
+#include <time.h>
 #include "pms.h"
 
 /* This structure is send over the mpi interface */
@@ -30,7 +31,8 @@ typedef struct qitem {
 
 TAILQ_HEAD(head, qitem) down;
 TAILQ_HEAD(, qitem) up;
-TAILQ_HEAD(, qitem) final;      /* only last process can write to it */
+TAILQ_HEAD(, qitem) out;      /* only last process can write to it */
+TAILQ_HEAD(, qitem) in;
 
 /* This func creates item that can be send over MPI interface.
  * @val     The number.
@@ -181,16 +183,35 @@ bool compare_condition()
   }
 }
 
+/**
+ * example code from: 
+ * http://www.guyrutenberg.com/2007/09/22/profiling-code-using-clock_gettime/
+ */
+void diff(struct timespec *start, struct timespec *end, struct timespec *temp) {
+    if ((end->tv_nsec - start->tv_nsec) < 0) {
+        temp->tv_sec = end->tv_sec - start->tv_sec - 1;
+        temp->tv_nsec = 1000000000 + end->tv_nsec - start->tv_nsec;
+    } else {
+        temp->tv_sec = end->tv_sec - start->tv_sec;
+        temp->tv_nsec = end->tv_nsec - start->tv_nsec;
+    }
+}
+
+
 int main(int argc, char *argv[])
 {
+static int ii = 10;
   int numprocs, n;      /* number of processes we work with */
   int myid;             /* ID of the processor */
   int c;                /* number from the file */
   int res;
 
+  struct timespec d;
+
   MPI_Status status; 
   MPI_Item *send, recv, *i;
 
+  struct timespec ts;
   struct head *queue;
   QItem *iterator, *tmp, *remove, *first_up, *first_down, *qi;
 
@@ -202,7 +223,11 @@ int main(int argc, char *argv[])
   unsigned int last_seq = 0;
   int tmp_seq;
   bool new_seq = false;
+  bool measure = false;
 
+  if (argc == 2 && (strcmp(argv[1], "-m") == 0)) {
+    measure = true;
+  }
   MPI_Init(&argc, &argv);
   MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
   MPI_Comm_rank(MPI_COMM_WORLD, &myid);
@@ -220,34 +245,58 @@ int main(int argc, char *argv[])
   MPI_Type_create_struct(nitems, blocklengths, offsets, types, &mpi_qitem);
   MPI_Type_commit(&mpi_qitem);
 
-  if ((f = fopen(FILE_NAME, "r")) == NULL) {
-    perror("fopen()");
-    return 1;
-  }
-
-  /* if the file contains only one value then there is nothing to sort */
-  c = fgetc(f);
-  if (fgetc(f) == EOF) {
-     printf("%d\n%d\n", c, c);
-     return 0;
-  } else {
-    /* get back to the begining of the file */
-    fseek(f, 0, SEEK_SET);
-  }
-
   if (myid == 0) {
 
+    TAILQ_INIT(&in);
+
+    if ((f = fopen(FILE_NAME, "r")) == NULL) {
+      perror("fopen()");
+      return 1;
+    }
+
+    /* read the input values and store them into the in queue */
     while ((c = fgetc(f)) != EOF) {
       printf("%d ", c);
-      fflush(stdout);
+      i = create_mpi_item(c, 0);
+      qi = create_qitem(i);
+      TAILQ_INSERT_TAIL(&in, qi, entries); i = NULL; qi = NULL;
+    }
+    putchar('\n');
+    fflush(stdout);   /* write the input values before printing sorted values */
 
-      send = create_mpi_item(c, cur_seq);
-      cur_seq++;
-      MPI_Send(send, 1, mpi_qitem, 1, TAG, MPI_COMM_WORLD); 
-      SEND_INFO(myid, send->val, send->seq);
+    if (fclose(f) == EOF) {
+      perror("fclose()");
+      return 0;
+    }
 
-      /* wait for response */
-      MPI_Recv(&res, 1, MPI_INT, 1, TAG, MPI_COMM_WORLD, &status);
+    /* if the file contains only one value then there is nothing to sort */
+    TAILQ_LENGTH(up_len, in, tmp, entries);
+    if (up_len == 1) {
+      printf("%d\n", TAILQ_FIRST(&in)->item->val);
+    } else {
+
+      struct timespec time1;
+      if (measure) {
+        clock_gettime(CLOCK_REALTIME, &time1);
+      }
+
+      TAILQ_FOREACH(tmp, &in, entries) {
+        //DPRINT("|%d", tmp->item->val);
+        send = create_mpi_item(tmp->item->val, cur_seq);
+        cur_seq++;
+        MPI_Send(send, 1, mpi_qitem, 1, TAG, MPI_COMM_WORLD); 
+        SEND_INFO(myid, send->val, send->seq);
+
+        /* wait for response */
+        MPI_Recv(&res, 1, MPI_INT, 1, TAG, MPI_COMM_WORLD, &status);
+      }
+
+      if (measure) {
+        /* wait until the last process end and ask for start time */
+        MPI_Recv(&res, 1, MPI_INT, numprocs-1, TAG, MPI_COMM_WORLD, &status);
+        MPI_Send(&(time1.tv_sec), 1, MPI_LONG_INT, numprocs-1, TAG, MPI_COMM_WORLD);
+        MPI_Send(&(time1.tv_nsec), 1, MPI_LONG_INT, numprocs-1, TAG, MPI_COMM_WORLD);
+      }
     }
   } 
   else {
@@ -255,7 +304,7 @@ int main(int argc, char *argv[])
     TAILQ_INIT(&down);
     TAILQ_INIT(&up);
     if (myid == numprocs-1) { 
-      TAILQ_INIT(&final);
+      TAILQ_INIT(&out);
     }
 
     cur_up_down = UP;
@@ -266,6 +315,7 @@ int main(int argc, char *argv[])
     n = pow(2, (numprocs-1));   /* count the number of input numbers */
 
     while (n != 0) {
+      /* until all the input number pass throught the process */
 
       TAILQ_LENGTH(up_len, up, tmp, entries);
       TAILQ_LENGTH(down_len, down, tmp, entries)
@@ -274,11 +324,11 @@ int main(int argc, char *argv[])
               myid, n, up_len, down_len, last_seq, cur_seq, (cur_up_down == UP) ? "UP" : "DOWN");
 
       if ((up_len + down_len) != n) {
-        MPI_Recv(&recv, 1, mpi_qitem, myid-1, TAG, MPI_COMM_WORLD, &status); RECV_INFO(myid, recv.val, recv.seq);
+        MPI_Recv(&recv, 1, mpi_qitem, myid-1, TAG, MPI_COMM_WORLD, &status);
+        RECV_INFO(myid, recv.val, recv.seq);
         MPI_Send(&res, 1, MPI_INT, myid-1, TAG, MPI_COMM_WORLD);
         
         place_received_item(&recv, &cur_up_down, &cur_seq, &last_seq, &new_seq);
-
         NEW_SEQ_FLAG_INFO(new_seq, myid, recv.val);
       } else {
         DPRINT("P%d: Skip receiving another item ...\n", myid);
@@ -349,7 +399,7 @@ int main(int argc, char *argv[])
               n--;
 
             } else {
-              DPRINT("DALSI PRVEK uz ma jine seq\n");
+              DPRINT("Next item in the queue has different seq num\n");
               break;
             }
           }
@@ -364,6 +414,17 @@ int main(int argc, char *argv[])
 
     } /* while end */
 
+    if (measure && myid == numprocs-1) {
+      struct timespec time1, time2, d;
+      clock_gettime(CLOCK_REALTIME, &time2);
+      MPI_Send(&res, 1, MPI_INT, 0, TAG, MPI_COMM_WORLD);
+      MPI_Recv(&(time1.tv_sec), 1, MPI_LONG_INT, 0, TAG, MPI_COMM_WORLD, &status);
+      MPI_Recv(&(time1.tv_nsec), 1, MPI_LONG_INT, 0, TAG, MPI_COMM_WORLD, &status);
+
+      diff(&time1, &time2, &d);
+      printf("time: %ld.%ld\n", d.tv_sec, d.tv_nsec);
+    }
+ 
     /* Free the entire UP queue  */
     while (iterator = TAILQ_FIRST(&up)) {
       TAILQ_FREE_ENTIRE_ITEM(up, iterator);
@@ -375,20 +436,18 @@ int main(int argc, char *argv[])
     }
 
     if (myid == numprocs-1) {
-      TAILQ_FOREACH_REVERSE(iterator, &final, head, entries) {
-        printf("\n%d", iterator->item->val);
+      TAILQ_FOREACH_REVERSE(iterator, &out, head, entries) {
+        printf("%d\n", iterator->item->val);
       }
 
       /* Free the entire tail queue  */
-      while (iterator = TAILQ_FIRST(&final)) {
-        TAILQ_FREE_ENTIRE_ITEM(final, iterator);
+      while (iterator = TAILQ_FIRST(&out)) {
+        TAILQ_FREE_ENTIRE_ITEM(out, iterator);
       }
     }
        
     DPRINT("(x) P%d END\n", myid);
   }
-
-  fclose(f);
 
   MPI_Type_free(&mpi_qitem);
   MPI_Finalize(); 

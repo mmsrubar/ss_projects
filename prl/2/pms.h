@@ -27,7 +27,7 @@
 
 #define QUEUE_UP_FINAL(val, seq, qitem)             \
   qitem = create_qitem(create_mpi_item(val, seq));  \
-  TAILQ_INSERT_TAIL(&final, qitem, entries);
+  TAILQ_INSERT_TAIL(&out, qitem, entries);
  
 
 #define set_queue_with_lower_seq(queue, id) \
@@ -56,6 +56,5 @@
 #define NEW_SEQ_FLAG_INFO(flag, id, val) {\
   if (flag) DPRINT("P%d: item val=%d -> NEW SEQ\n", id, val); \
 }
-
 
 #endif	// PMS_H
