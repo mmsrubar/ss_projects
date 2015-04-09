@@ -1,0 +1,10 @@
+S,B,A,A1,B2
+S
+B2
+S,a,A
+B,b,B
+A,a,A1
+A1,a,B
+B,a,B2
+S,b,B
+S,a,B2
