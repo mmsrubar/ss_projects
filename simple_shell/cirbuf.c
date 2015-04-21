@@ -13,16 +13,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <sys/types.h>
 #include <assert.h>
+#include <string.h>
+#include <sys/types.h>
 #include "cirbuf.h"
 
 /* Remove task with specified task_id. */
-static void cirbuf_remove_task(CIRBUFITEM *buf[], int id)
+void cirbuf_remove_task(CIRBUFITEM *buf[], int id)
 {
   assert(buf != NULL);
+  assert(buf[id] != NULL);
   assert(id >= 0 && id < MAX_BG_PROCS);
 
+  free(buf[id]->proc_info);
   free(buf[id]);
   buf[id] = NULL;
 }
@@ -42,7 +45,7 @@ void cirbuf_set_task_done(CIRBUFITEM *buf[], pid_t pid)
   }
 }
 
-int cirbuf_get_done_task(CIRBUFITEM *buf[])
+CIRBUFITEM *cirbuf_get_done_task(CIRBUFITEM *buf[])
 {
   int i;
 
@@ -50,12 +53,11 @@ int cirbuf_get_done_task(CIRBUFITEM *buf[])
 
   for (i = 0; i < MAX_BG_PROCS; i++) {
     if (buf[i] != NULL && buf[i]->running == false) {
-      cirbuf_remove_task(buf, buf[i]->task_id);
-      return i+1;
+      return buf[i];
     }
   }
 
-  return 0;
+  return NULL;
 }
 
 /* Find and return first non NULL pointer. If the buffer is full then there is
@@ -76,12 +78,13 @@ static int cirbuf_find_index(CIRBUFITEM *buf[])
   return -1;
 }
 
-int cirbuf_add(CIRBUFITEM *buf[], pid_t pid)
+int cirbuf_add(CIRBUFITEM *buf[], pid_t pid, char *proc_info)
 {
   int index;
   CIRBUFITEM *new;
 
   assert(buf != NULL);
+  assert(proc_info != NULL);
   assert(pid > 0);
 
   if ((index = cirbuf_find_index(buf)) == -1) {
@@ -89,6 +92,11 @@ int cirbuf_add(CIRBUFITEM *buf[], pid_t pid)
   } 
   else {
     if ((new = (CIRBUFITEM *) malloc(sizeof(CIRBUFITEM))) == NULL) {
+      perror("malloc");
+      return -1;
+    }
+
+    if ((new->proc_info = strdup(proc_info)) == NULL) {
       perror("malloc");
       return -1;
     }

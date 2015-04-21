@@ -71,7 +71,8 @@ void sigfunc(int signo)
  *
  *  program arg1 arg2 ... argN [>output_file] [<input_file] [&]
  */
-void cmdline_parser(char *buf, char *prog[], char **output, char **input, bool *bg)
+void cmdline_parser(char *buf, char *prog[], char **output, char **input, 
+                    bool *bg, char bg_proc_info[])
 {
   char *token;
   char *tmp;
@@ -90,11 +91,15 @@ void cmdline_parser(char *buf, char *prog[], char **output, char **input, bool *
   *bg = false;
   i = 0;
   memset(prog, '\0', sizeof(char *) * MAX_PROG_ARGS);
+  memset(bg_proc_info, '\0', sizeof(char *) * BUF_SIZE);
 
   /* strtok cannot be used on constant strings! */
   if ((token = strtok_r(buf, delimiter, &tmp)) != NULL) {
     /* get the program name first */
     prog[i] = token; i++;
+    /* no need to check boundaries because it will never be longer then BUF_SIZE
+     * but it would be better to check it!*/
+    strcat(bg_proc_info, token);
 
     while ((token = strtok_r(NULL, delimiter, &tmp)) != NULL) {
 
@@ -129,6 +134,8 @@ void cmdline_parser(char *buf, char *prog[], char **output, char **input, bool *
         default:
           /* a program argument */
           prog[i] = token;
+          strcat(bg_proc_info, " ");
+          strcat(bg_proc_info, token);
       }
 
       i++;
@@ -138,18 +145,26 @@ void cmdline_parser(char *buf, char *prog[], char **output, char **input, bool *
   prog[i] = NULL;
 }
 
-
-
 void *thread_cmd_exec(void *par)
 {
+  /* An array of string where first is the program name and the others are its
+   * arguments. There has to be a NULL after the last program argument. */
   char *prog[MAX_PROG_ARGS];
+  /* Information about background process name and its arguments. When a task
+   * run in background is done then this information is used to tell what task
+   * has compeleted. */
+  char bg_proc_info[BUF_SIZE];
   char *output = NULL;
   char *input = NULL;
   bool bg;
   pid_t pid;
   struct sigaction sa;
   sigset_t sb;
-  int out_fd, in_fd, task = 0;
+  int out_fd, in_fd;
+
+  int task_id = 0;
+  CIRBUFITEM *task_p;
+
 
   memset(bg_procs, '\0', sizeof(CIRBUFITEM *) * MAX_BG_PROCS);
   while (1) {
@@ -178,7 +193,7 @@ void *thread_cmd_exec(void *par)
 
     if (cmd != 0) {
       cmd--;
-      cmdline_parser(buf, prog, &output, &input, &bg);
+      cmdline_parser(buf, prog, &output, &input, &bg, bg_proc_info);
     } else if (quit) {
       /* user typed 'exit' so we can exit this thread now */
       pthread_mutex_unlock(&mutex);
@@ -219,11 +234,11 @@ void *thread_cmd_exec(void *par)
     
     /* it's safe to work with bg_procs buffer even if the signal handler works
      * with it because we have denied the SIGCHLD signal interrupt */
-    if ((bg && (task = cirbuf_add(bg_procs, pid)) == -1) || bg == false) {
+    if ((bg && (task_id = cirbuf_add(bg_procs, pid, bg_proc_info)) == -1) || bg == false) {
       /* run a process in foreground -> wait until it exit if the the buffer of
        * background processes is full or the program is meant to be in
        * foreground */
-      if (task == -1) {
+      if (task_id == -1) {
         printf("Buffer is full, running the command in foreground.\n");
       }
 
@@ -231,15 +246,17 @@ void *thread_cmd_exec(void *par)
     } 
     else {
       /* run a process in background -> don't wait for SIGCHLD now */
-      printf("[%d] %ld\n", task, (long int)pid); /* buffer is not full yet */
+      printf("[%d] %ld\n", task_id, (long int)pid); /* buffer is not full yet */
  
       /* Allow SIGCHLD interrupt */
       sigprocmask(SIG_UNBLOCK, &sb, NULL);
     }
 
     /* Any done tasks? */
-    while ((task = cirbuf_get_done_task(bg_procs))) {
-      printf("[%d]+ Done\n", task); fflush(stdout);
+    while ((task_p = cirbuf_get_done_task(bg_procs))) {
+      task_id = task_p->task_id;
+      printf("[%d]+ Done\t%s\n", task_id, task_p->proc_info); 
+      cirbuf_remove_task(bg_procs, bg_procs[task_id]->task_id);
     }
 
     pthread_mutex_lock(&mutex);
