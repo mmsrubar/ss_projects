@@ -3,10 +3,10 @@ CC=gcc
 CFLAGS=-Wall -g -pedantic -pthread
 
 fork: fork.c cirbuf.o cirbuf.h
-	$(CC) $(CFLAGS) fork.c cirbuf.o cirbuf.h -o fork
+	$(CC) $(CFLAGS) fork.c cirbuf.o -o fork
 
 cirbuf.o: cirbuf.c cirbuf.h
-	$(CC) $(CFLAGS) -c $?
+	$(CC) $(CFLAGS) -c $<
 
 clean:
 	rm -f fork core* cirbuf.o
