@@ -5,9 +5,17 @@
  * Date:        Tue Apr 14 09:03:50 CEST 2015
  *
  * Desription:
+ * This is a very simple implementation of a bash shell which implements just
+ * simple functionality as:
+ *  - run any program (take PATH varible in case)
+ *  - run a program at background (max. MAX_BG_PROCS processes)
+ *  - input and output redirection using > and <
  *
- * It supports only MAX_BG_PROCS which can be run in background and only BUF_SIZE
- * long inputs from users.
+ * It uses two threads and a monitor for synchronization of shared buffer which
+ * is used to pass data from user (reading user input handles the first thread)
+ * to second thread which does the creation of a new process and performs the
+ * exec of user specified commmand in it.
+ *
  */
  
 #define _XOPEN_SOURCE 700
@@ -38,6 +46,7 @@
 
 /* Circular buffer of processes running in background */
 CIRBUFITEM *bg_procs[MAX_BG_PROCS];
+
 /* ========================================================================== */
 /* MONITOR */
 /* ========================================================================== */
@@ -52,12 +61,26 @@ bool cont = true;     /* the exec thread tells to the main thread that it can
 /* ========================================================================== */
 
 volatile sig_atomic_t sig;
+pid_t pid;
 void sigfunc(int signo)
 {
-  pid_t pid;
+  pid_t exited_pid;
+  struct sigaction sa;
+
   sig = 1;
-  pid = wait(NULL);
-  cirbuf_set_task_done(bg_procs, pid);
+
+  switch (signo) {
+    case SIGCHLD:
+      exited_pid = wait(NULL);
+      cirbuf_set_task_done(bg_procs, exited_pid);
+      break;
+    case SIGINT:
+      /* pass the pid as a context to the signal handler? */
+      kill(pid, SIGKILL);
+      sa.sa_handler = SIG_DFL;
+      sigaction(SIGINT, &sa, NULL);
+      break;
+  }
   /*printf("pid exit: %ld\n", (long int)pid);*/
 }
 
@@ -91,7 +114,7 @@ void cmdline_parser(char *buf, char *prog[], char **output, char **input,
   *bg = false;
   i = 0;
   memset(prog, '\0', sizeof(char *) * MAX_PROG_ARGS);
-  memset(bg_proc_info, '\0', sizeof(char *) * BUF_SIZE);
+  memset(bg_proc_info, '\0', sizeof(char) * BUF_SIZE);
 
   /* strtok cannot be used on constant strings! */
   if ((token = strtok_r(buf, delimiter, &tmp)) != NULL) {
@@ -157,7 +180,6 @@ void *thread_cmd_exec(void *par)
   char *output = NULL;
   char *input = NULL;
   bool bg;
-  pid_t pid;
   struct sigaction sa;
   sigset_t sb;
   int out_fd, in_fd;
@@ -179,6 +201,7 @@ void *thread_cmd_exec(void *par)
     /* Deny sw interupt from SIGCHLD signal */
     sigemptyset(&sb);
     sigaddset(&sb, SIGCHLD);
+    sigaddset(&sb, SIGINT);
     sigprocmask(SIG_BLOCK, &sb, NULL);
 
     sa.sa_handler = sigfunc;
@@ -186,6 +209,9 @@ void *thread_cmd_exec(void *par)
     /* otherwise it would interrupt read() in main thread */
     sa.sa_flags = SA_RESTART;
     if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+      handle_error_en(errno, "sigaction", NULL);
+    }
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
       handle_error_en(errno, "sigaction", NULL);
     }
 
@@ -232,6 +258,8 @@ void *thread_cmd_exec(void *par)
       perror("fork");
     } 
     
+    /* printf("forked: %ld\n", (long int)pid); */
+
     /* it's safe to work with bg_procs buffer even if the signal handler works
      * with it because we have denied the SIGCHLD signal interrupt */
     if ((bg && (task_id = cirbuf_add(bg_procs, pid, bg_proc_info)) == -1) || bg == false) {
