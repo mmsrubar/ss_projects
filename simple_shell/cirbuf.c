@@ -112,7 +112,7 @@ void print_debug(CIRBUFITEM *buf[])
   for (i = 0; i < MAX_BG_PROCS; i++) {
     if (buf[i] != NULL) {
       printf("p[%d]: pid: %ld, state: %c\n", buf[i]->task_id, 
-            buf[i]->pid, (buf[i]->running) ? 'R' : 'D');
+            (long int)buf[i]->pid, (buf[i]->running) ? 'R' : 'D');
     }
   }
   putchar('\n');
