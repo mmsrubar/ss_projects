@@ -91,7 +91,7 @@ void cmdline_parser(char *buf, char *prog[], char **output, char **input,
   *bg = false;
   i = 0;
   memset(prog, '\0', sizeof(char *) * MAX_PROG_ARGS);
-  memset(bg_proc_info, '\0', sizeof(char *) * BUF_SIZE);
+  memset(bg_proc_info, '\0', sizeof(char) * BUF_SIZE);
 
   /* strtok cannot be used on constant strings! */
   if ((token = strtok_r(buf, delimiter, &tmp)) != NULL) {
