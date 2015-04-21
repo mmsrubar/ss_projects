@@ -29,7 +29,8 @@
 #include <assert.h>
 #include "cirbuf.h"
 
-#define BUF_SIZE  512 + 1
+#define BUF_SIZE      512 + 1
+#define MAX_PROG_ARGS 256
 #define PROMPT    "$ "
 
 #define handle_error_en(en, msg, ret) \
@@ -37,8 +38,6 @@
 
 /* Circular buffer of processes running in background */
 CIRBUFITEM *bg_procs[MAX_BG_PROCS];
-volatile sig_atomic_t sig;
-
 /* ========================================================================== */
 /* MONITOR */
 /* ========================================================================== */
@@ -51,6 +50,17 @@ int cmd   = 0;        /* non-zero value tells the exec thread that it has some
 bool cont = true;     /* the exec thread tells to the main thread that it can
                          continue reading input from a user */
 /* ========================================================================== */
+
+volatile sig_atomic_t sig;
+void sigfunc(int signo)
+{
+  pid_t pid;
+  sig = 1;
+  pid = wait(NULL);
+  cirbuf_set_task_done(bg_procs, pid);
+  /*printf("pid exit: %ld\n", (long int)pid);*/
+}
+
 
 /* The command line input is expected in the following format:
  * - the program name is the first
@@ -79,6 +89,7 @@ void cmdline_parser(char *buf, char *prog[], char **output, char **input, bool *
   *input = NULL;
   *bg = false;
   i = 0;
+  memset(prog, '\0', sizeof(char *) * MAX_PROG_ARGS);
 
   /* strtok cannot be used on constant strings! */
   if ((token = strtok_r(buf, delimiter, &tmp)) != NULL) {
@@ -127,32 +138,18 @@ void cmdline_parser(char *buf, char *prog[], char **output, char **input, bool *
   prog[i] = NULL;
 }
 
-void sigfunc(int signo)
-{
-  pid_t pid;
-  sig = 1;
-  pid = wait(NULL);
-  switch (signo) {
-    case SIGCHLD:
-      cirbuf_set_task_done(bg_procs, pid);
-      break;
-    case SIGINT:
-      /* no need to do anything */
-      break;
-  }
-  /*printf("pid exit: %ld\n", (long int)pid);*/
-}
+
 
 void *thread_cmd_exec(void *par)
 {
-  char *prog[256];
+  char *prog[MAX_PROG_ARGS];
   char *output = NULL;
   char *input = NULL;
   bool bg;
   pid_t pid;
   struct sigaction sa;
   sigset_t sb;
-  int out_fd, in_fd, task;
+  int out_fd, in_fd, task = 0;
 
   memset(bg_procs, '\0', sizeof(CIRBUFITEM *) * MAX_BG_PROCS);
   while (1) {
@@ -306,7 +303,6 @@ int main(int argc, char *argv[])
         buf[ret] = '\0';
 
       pthread_mutex_lock(&mutex);
-      strncpy(buf, buf, ret);
       cmd++;
       pthread_cond_signal(&cond);  
       pthread_mutex_unlock(&mutex);
