@@ -270,6 +270,8 @@ void *thread_cmd_exec(void *par)
         printf("Buffer is full, running the command in foreground.\n");
       }
 
+	  /* FIXME: There must be some bug in here because sigsuspend does not
+	   * return at Solaris. It just freeze here. */
       while (sig == 0 && sigsuspend(&sa.sa_mask) == -1 && errno == EINTR);
     } 
     else {
