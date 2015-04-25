@@ -182,16 +182,15 @@ inline int fitness2(chromozom p_chrom, int *p_svystup) {
               case 5: *p_vystup++ = in1 >> 1; break;       //right shift by 1
               case 6: *p_vystup++ = in1 >> 2; break;       //right shift by 22
               case 7: *p_vystup++ = (in1 + in2) % 255; break;       //add
-              case 8: *p_vystup++ = in1 | in2; break; //or
-              case 9: *p_vystup++ = in1 & in2; break; //and
-              case 10: *p_vystup++ = in1 ^ in2; break; //xor
-              case 11: *p_vystup++ = ~(in1 & in2); break; //nand
-              
-                      /*
+              case 8: *p_vystup++ = (in1 > 0xFF - in2) ? 0xFF : in1 + in2; break;
+              case 9: *p_vystup++ = (in1+in2) >> 1; break;
+              case 10: *p_vystup++ = (in1 > 127 - in2) ? in2 : in1; break;       
+              case 11: *p_vystup++ = (unsigned char) abs(in1 -in2); break;       
               case 12: *p_vystup++ = in1 | in2; break; //or
               case 13: *p_vystup++ = in1 & in2; break; //and
               case 14: *p_vystup++ = in1 ^ in2; break; //xor
               case 15: *p_vystup++ = ~(in1 & in2); break; //nand
+                        /*
                        *
               case 3: *p_vystup++ = in1 ^ in2; break; //xor
 
