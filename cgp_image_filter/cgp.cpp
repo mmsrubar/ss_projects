@@ -324,14 +324,14 @@ unsigned char **getNextWindow(unsigned char **matrix, int *i, int *j)
     return NULL;
   }
 
-  unsigned char **window = (unsigned char **)malloc(sizeof(unsigned char) * WIN_ROWS);
+  unsigned char **window = (unsigned char **)malloc(sizeof(unsigned char *) * WIN_ROWS);
   if (window == NULL) {
     perror("malloc");
     return NULL;
   }
   for (k = 0; k < WIN_ROWS; k++) {
     window[k] = (unsigned char *)malloc(sizeof(unsigned char) * WIN_COLS);
-    if (window == NULL) {
+    if (window[k] == NULL) {
       perror("malloc");
       return NULL;
     }
@@ -395,6 +395,11 @@ inline void ohodnoceni2(int vstup_komb[], int minidx, int maxidx, int ignoreidx)
       vystupy2[6] = p_win[2][0];
       vystupy2[7] = p_win[2][1];
       vystupy2[8] = p_win[2][2];
+
+      for (int k = 0; k < WIN_ROWS; k++) {
+        free(p_win[k]);
+      }
+      free(p_win);
 
     //vstup_komb += param_in;
 
@@ -675,11 +680,9 @@ int main(int argc, char* argv[])
         maxfitpop = 0;
         while (param_generaci++ < PARAM_GENERATIONS) {
 
-          /*
             if (param_generaci % 100 == 0) {
               printf("gen: %d\n", param_generaci); fflush(stdout);
             }
-            */
             //printf("generace: %d\n", param_generaci);
             //-----------------------------------------------------------------------
             //Periodicky vypis chromozomu populace
@@ -746,7 +749,7 @@ int main(int argc, char* argv[])
                    //nalezen lepsi nebo stejne dobry jedinec jako byl jeho rodic
 
                    if (fitt[i] < bestfit) {   // FIXME: tady bylo >
-                      printf("Generation:%d\t\tFittness: %f/%d\n",param_generaci,fitt[i],maxfitness);
+                      printf("Generation:%d\t\tFittness: %f/%d\n",param_generaci,fitt[i],maxfitness); fflush(stdout);
                       log = true;
                    }
 
