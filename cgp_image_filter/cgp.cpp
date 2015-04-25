@@ -16,7 +16,8 @@
 #define MATRIX_ROWS 250
 #define MATRIX_COLS 250
 
-#define MAX(x,y) {(x > y) ? x : y}
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
 int wins_num = pow((MATRIX_ROWS-2), 2);
 
 unsigned char *vystupy2;  //pole vystupnich hodnot pro vyhodnocovani fce
@@ -176,19 +177,27 @@ inline int fitness2(chromozom p_chrom, int *p_svystup) {
               case 0: *p_vystup++ = 255; break;       //konstanta
               case 1: *p_vystup++ = in1; break;       //identita
               case 2: *p_vystup++ = 255-in1; break;       //inverze
-              case 3: *p_vystup++ = 255-in1; break;       //inverze
-
+              case 3: *p_vystup++ = MAX(in1, in2); break;       //max
+              case 4: *p_vystup++ = MIN(in1, in2); break;       //max
+              case 5: *p_vystup++ = in1 >> 1; break;       //right shift by 1
+              case 6: *p_vystup++ = in1 >> 2; break;       //right shift by 22
+              case 7: *p_vystup++ = (in1 + in2) % 255; break;       //add
+              case 8: *p_vystup++ = in1 | in2; break; //or
+              case 9: *p_vystup++ = in1 & in2; break; //and
+              case 10: *p_vystup++ = in1 ^ in2; break; //xor
+              case 11: *p_vystup++ = ~(in1 & in2); break; //nand
+              
                       /*
-              case 1: *p_vystup++ = in1 & in2; break; //and
-              case 2: *p_vystup++ = in1 | in2; break; //or
+              case 12: *p_vystup++ = in1 | in2; break; //or
+              case 13: *p_vystup++ = in1 & in2; break; //and
+              case 14: *p_vystup++ = in1 ^ in2; break; //xor
+              case 15: *p_vystup++ = ~(in1 & in2); break; //nand
+                       *
               case 3: *p_vystup++ = in1 ^ in2; break; //xor
 
               case 4: *p_vystup++ = ~in1; break;  //not in1
               case 5: *p_vystup++ = ~in2; break;  //not in2
 
-              case 6: *p_vystup++ = in1 & ~in2; break;
-              case 7: *p_vystup++ = ~(in1 & in2); break;
-              case 8: *p_vystup++ = ~(in1 | in2); break;
               */
               default: ;
                  //*p_vystup++ = 0xffffffff; //log 1
@@ -666,9 +675,11 @@ int main(int argc, char* argv[])
         maxfitpop = 0;
         while (param_generaci++ < PARAM_GENERATIONS) {
 
+          /*
             if (param_generaci % 100 == 0) {
-              printf("stovka za nami\n"); fflush(stdout);
+              printf("gen: %d\n", param_generaci); fflush(stdout);
             }
+            */
             //printf("generace: %d\n", param_generaci);
             //-----------------------------------------------------------------------
             //Periodicky vypis chromozomu populace
