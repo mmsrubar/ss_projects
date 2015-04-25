@@ -1,12 +1,15 @@
-all:	cgp
+#pri sestavovani binarky pro testovani zapni optimalizace
+all:	cgp solaris
 
 cgp:	cgp.cpp cgp.h
-		#g++ cgp.cpp -lm -g -o cgp
 		g++ cgp.cpp -g -O3 -o bin
-		echo "pri sestavovani binarky pro testovani zapni optimalizace"
+
+solaris:	cgp.cpp cgp.h
+	gcc -Wl,-rpath,/usr/sfw/lib -O3 -o krok-bin cgp.cpp -lstdc++
+
 
 clean:
-		rm cgp core.* log* bin
+		rm cgp core.* log* bin krok-bin
 
 cleanlog:
 		rm log_*.*
