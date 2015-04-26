@@ -791,9 +791,10 @@ int main(int argc, char* argv[])
     
         //if (bestfit == maxfitness) {
         //nejlepsi chromozom zapis tak jako tak, protoze nuly nikdy nedosahneme
-            strcpy(fn, logfname2.c_str()); strcat(fn,".chr");
-            FILE *chrfil = fopen(fn,"wb");
+            strcpy(fn, "best_chromozoms"); strcat(fn,".chr");
+            FILE *chrfil = fopen(fn,"ab");
             fprintf(chrfil, POPIS);
+            fprintf(chrfil, "Best chromosome fitness: %f/%d\n",bestfit,maxfitness);
             print_chrom(chrfil, (chromozom)populace[bestfit_idx]);
             fclose(chrfil);
         //}
