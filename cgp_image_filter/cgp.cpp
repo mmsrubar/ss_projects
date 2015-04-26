@@ -500,6 +500,8 @@ int main(int argc, char* argv[])
 	printf("mutece (o 1 mensi): %d\n", MUTACE_MAX);
 	printf("pocet sloupcu m: %d\n", PARAM_M);
 	printf("pocet sloupcu n: %d\n", PARAM_N);
+	printf("gif img soubor se sumem: %s\n", argv[1]);
+	printf("original gif img: %s\n", argv[2]);
 
     // input file of the filter
     gif_data = new unsigned char*[MATRIX_ROWS];
