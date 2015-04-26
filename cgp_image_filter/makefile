@@ -10,7 +10,7 @@ solaris:	cgp.cpp cgp.h
 
 
 clean:
-		rm core.* log* krok-bin linux-bin
+		rm core.* log* krok-bin linux-bin linux-bin-psnr
 
 cleanlog:
 		rm log_*.*
