@@ -13,8 +13,8 @@
 // TYTO GLOB. PROMENNE JSOU POUZITY PRO MOU VARIANTU PROJEKTU
 #define WIN_ROWS  3
 #define WIN_COLS  3
-#define MATRIX_ROWS 250
-#define MATRIX_COLS 250
+#define MATRIX_ROWS 128
+#define MATRIX_COLS 128
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
@@ -199,7 +199,7 @@ inline int fitness2(chromozom p_chrom, int *p_svystup) {
 
               */
               default: ;
-                 //*p_vystup++ = 0xffffffff; //log 1
+                 *p_vystup++ = 0xff; //log 1
             }
         }
     }
@@ -495,13 +495,15 @@ int main(int argc, char* argv[])
     vystupy2 = new unsigned char [maxidx_out+param_out];
     pouzite = new int [maxidx_out];
 
-	printf("pocet generaci: %d\n", PARAM_GENERATIONS);
-	printf("pocet jedincu populace: %d\n", POPULACE_MAX);
-	printf("mutece (o 1 mensi): %d\n", MUTACE_MAX);
-	printf("pocet sloupcu m: %d\n", PARAM_M);
-	printf("pocet sloupcu n: %d\n", PARAM_N);
-	printf("gif img soubor se sumem: %s\n", argv[1]);
-	printf("original gif img: %s\n", argv[2]);
+    printf("pocet generaci: %d\n", PARAM_GENERATIONS);
+    printf("pocet jedincu populace: %d\n", POPULACE_MAX);
+    printf("mutece (o 1 mensi): %d\n", MUTACE_MAX);
+    printf("pocet sloupcu m: %d\n", PARAM_M);
+    printf("pocet sloupcu n: %d\n", PARAM_N);
+    printf("ocekavana velikost obrazku: %dx%d\n", MATRIX_ROWS, MATRIX_COLS);
+    printf("gif img soubor se sumem: %s\n", argv[1]);
+    printf("original gif img: %s\n", argv[2]);
+    printf("velikost pouziteho okna %dx%d\n", WIN_ROWS, WIN_COLS);
 
     // input file of the filter
     gif_data = new unsigned char*[MATRIX_ROWS];
@@ -787,13 +789,14 @@ int main(int argc, char* argv[])
         printf("Best chromosome: ");
         print_chrom(stdout, (chromozom)populace[bestfit_idx]);
     
-        if (bestfit == maxfitness) {
+        //if (bestfit == maxfitness) {
+        //nejlepsi chromozom zapis tak jako tak, protoze nuly nikdy nedosahneme
             strcpy(fn, logfname2.c_str()); strcat(fn,".chr");
             FILE *chrfil = fopen(fn,"wb");
             fprintf(chrfil, POPIS);
             print_chrom(chrfil, (chromozom)populace[bestfit_idx]);
             fclose(chrfil);
-        }
+        //}
 
         if (bestfit == maxfitness) 
            run_succ++; 
