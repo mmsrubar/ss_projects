@@ -495,6 +495,14 @@ int main(int argc, char* argv[])
     vystupy2 = new unsigned char [maxidx_out+param_out];
     pouzite = new int [maxidx_out];
 
+	printf("pocet generaci: %d\n", PARAM_GENERATIONS);
+	printf("pocet jedincu populace: %d\n", POPULACE_MAX);
+	printf("mutece (o 1 mensi): %d\n", MUTACE_MAX);
+	printf("pocet sloupcu m: %d\n", PARAM_M);
+	printf("pocet sloupcu n: %d\n", PARAM_N);
+	printf("gif img soubor se sumem: %s\n", argv[1]);
+	printf("original gif img: %s\n", argv[2]);
+
     // input file of the filter
     gif_data = new unsigned char*[MATRIX_ROWS];
     for (i = 0; i < MATRIX_ROWS; ++i) {
@@ -679,9 +687,11 @@ int main(int argc, char* argv[])
         maxfitpop = 0;
         while (param_generaci++ < PARAM_GENERATIONS) {
 
+				/*
             if (param_generaci % 100 == 0) {
               printf("gen: %d\n", param_generaci); fflush(stdout);
             }
+			*/
             //printf("generace: %d\n", param_generaci);
             //-----------------------------------------------------------------------
             //Periodicky vypis chromozomu populace
