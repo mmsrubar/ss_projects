@@ -1,15 +1,16 @@
 #pri sestavovani binarky pro testovani zapni optimalizace
-all:	cgp solaris
+all:	linux solaris
 
-cgp:	cgp.cpp cgp.h
-		g++ cgp.cpp -g -O3 -o bin
+linux:	cgp_psnr.cpp cgp.cpp cgp.h
+		g++ cgp.cpp -g -o linux-bin -lm
+		g++ cgp_psnr.cpp -g -o linux-bin-psnr -lm
 
 solaris:	cgp.cpp cgp.h
-	gcc -Wl,-rpath,/usr/sfw/lib -O3 -o krok-bin cgp.cpp -lstdc++
+	gcc -Wl,-rpath,/usr/sfw/lib -O3 -o krok-bin cgp.cpp -lstdc++ 
 
 
 clean:
-		rm cgp core.* log* bin krok-bin
+		rm core.* log* krok-bin linux-bin
 
 cleanlog:
 		rm log_*.*
