@@ -1,0 +1,34 @@
+Popis fungovani programu:
+=========================
+Program nejprve nacte pravou linearni gramatiku ze souboru nebo ze standartniho
+vstupu a ulozi ji jako datovy typ 'Gramatika' pod jmeno 'plg' a to tak ze dojde
+k precteni veskereho vstupu, ktery je nasledne rozparsovan. Pote je na
+zaklade vstupni volby provedena jedna z nasledujicich akci:
+  1 tisk nactene gramatiky na stdout,
+  2 prevod gramatiky na gramatiku jejiz pravidla odpovidaji prave regularni
+    gramatice a jeji nasledny tisk na stdout,
+  3 prevod gramatiky z bodu 2 na nedetermenisticky konecny automat.
+
+1. Vypsani nactene gramatiky
+----------------------------
+Tisk nactene gramatiky provadi funkce 'printGrammar', kde dojde k vypsani
+nactene gramatiky pomoci funkci, ktere specifikuje datovy typ 'Gramatika'.
+
+2. Prevod linearni gramatiky na regularni
+-----------------------------------------
+Prevod PLG na PRG gramatiku provadi funkce 'getPrg'. Funkce 'prgRules' vytvari
+novou mnozinu pravidel, kde pravidla odpovidaji pravidlum prave lin. gramatiky.
+Detailni popis prevodu jednotlivych typu pravidel je mozne nalezlt primo ve
+zdrojovem souboru.
+
+3. Prevod PRG na NKA
+--------------------
+Prevod PRG na nedeterministicky konecny automat provadi funkce 'getNka', ktera
+vyuziva vsech predchozich funkci.
+
+
+TESTOVANI
+=========
+K projektu je prilozen testovaci skript 'test_me.sh' a adresar tests, ktery
+obsahuje sadu testovacich gramatik a k nim odpovidajici nka, ktere tento program
+generuje.
