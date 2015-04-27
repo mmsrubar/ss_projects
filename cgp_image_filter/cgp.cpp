@@ -96,10 +96,10 @@ void print_chrom(FILE *fout, chromozom p_chrom) {
 }
 
 void print_xls(FILE *xlsfil) {
-  fprintf(xlsfil, "%d\t%d\t%d\t%d\t\t",param_generaci,bestfit,fitpop,bestblk);
-  for (int i=0; i < param_populace;  i++)
-      fprintf(xlsfil, "%d\t",fitt[i]);
-  fprintf(xlsfil, "\n");
+  fprintf(xlsfil, "%d\t%f\t%d\t%d\t\t",param_generaci,bestfit,fitpop,bestblk);
+  for (int i=0; i < param_populace;  i++) {
+      fprintf(xlsfil, "%f\t",fitt[i]);
+  } fprintf(xlsfil, "\n");
 }
 
 //-----------------------------------------------------------------------
@@ -389,8 +389,8 @@ int main(int argc, char* argv[])
     int i, j, c;
     int parentidx;
     
-    if (argc < 3) {
-      printf("Usage: %s noise_raw_gif orig_raw_gif\n", argv[0]);
+    if (argc < 4) {
+      printf("Usage: %s noise_raw_gif orig_raw_gif run\n", argv[0]);
       return EXIT_FAILURE;
     }
 
@@ -507,9 +507,10 @@ int main(int argc, char* argv[])
         t = time(NULL);
         tl = localtime(&t);
     
-        sprintf(fn, "_%d", run);
+        sprintf(fn, "_%d", atoi(argv[3]));
         logfname2 = logfname + string(fn);
-        strcpy(fn, logfname2.c_str()); strcat(fn,".xls");
+        //strcpy(fn, logfname2.c_str()); strcat(fn,".xls");
+        strcpy(fn, logfname2.c_str()); strcat(fn,".ods");
         xlsfil = fopen(fn,"wb");
         if (!xlsfil) {
            printf("Can't create file %s!\n",fn);
@@ -521,7 +522,7 @@ int main(int argc, char* argv[])
         fprintf(xlsfil, "\n");
     
         printf("----------------------------------------------------------------\n");
-        printf("Run: %d \t\t %s", run, asctime(tl));
+        printf("Run: %d \t\t %s", atoi(argv[3]), asctime(tl));
         printf("----------------------------------------------------------------\n");
     
         //-----------------------------------------------------------------------
@@ -543,17 +544,8 @@ int main(int argc, char* argv[])
                 *p_chrom++ = rnd;
             }
             for (int j=outputidx; j < outputidx+param_out; j++)  //napojeni vystupu
-                //*p_chrom++ = rand() % maxidx_out;
-                *p_chrom = rand() % maxidx_out;
-                *p_chrom++;
+                *p_chrom++ = rand() % maxidx_out;
         }
-        /*
-        printf("pocatecni populace ma tyto choromozomy: \n");
-        for (int i = 0; i < param_populace; i++) {
-          printf("%d: ", i);
-          print_chrom(stdout, (chromozom) populace[i]);
-        }
-          */
 
         //-----------------------------------------------------------------------
         //Ohodnoceni pocatecni populace
@@ -683,10 +675,9 @@ int main(int argc, char* argv[])
     
         //if (bestfit == maxfitness) {
         //nejlepsi chromozom zapis tak jako tak, protoze nuly nikdy nedosahneme
-            strcpy(fn, "best_chromozoms"); strcat(fn,".chr");
-            FILE *chrfil = fopen(fn,"ab");
+            strcpy(fn, logfname2.c_str()); strcat(fn,".chr");
+            FILE *chrfil = fopen(fn,"wb");
             fprintf(chrfil, POPIS);
-            fprintf(chrfil, "Best chromosome fitness: %f/%d\n",bestfit,maxfitness);
             print_chrom(chrfil, (chromozom)populace[bestfit_idx]);
             fclose(chrfil);
         //}
