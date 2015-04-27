@@ -170,6 +170,11 @@ inline int fitness2(chromozom p_chrom, int *p_svystup) {
             in2 = vystupy2[*p_chrom++];
             fce = *p_chrom++;
 
+            /*
+            printf("in1: %d\n", in1);
+            printf("in2: %d\n", in2);
+            printf("fce: %d\n", fce);
+            */
             switch (fce) {
               // FIXME: doimplementovat dalsi funkce
               // provede se hradlo a vysledek se ulozi do pole vystupy na
@@ -184,20 +189,12 @@ inline int fitness2(chromozom p_chrom, int *p_svystup) {
               case 7: *p_vystup++ = (in1 + in2) % 255; break;       //add
               case 8: *p_vystup++ = (in1 > 0xFF - in2) ? 0xFF : in1 + in2; break;
               case 9: *p_vystup++ = (in1+in2) >> 1; break;
-              case 10: *p_vystup++ = (in1 > 127 - in2) ? in2 : in1; break;       
-              case 11: *p_vystup++ = (unsigned char) abs(in1 -in2); break;       
+              case 10: *p_vystup++ = (in1 > 127 - in2) ? in2 : in1; break;
+              case 11: *p_vystup++ = (unsigned char) abs(in1 -in2); break;
               case 12: *p_vystup++ = in1 | in2; break; //or
               case 13: *p_vystup++ = in1 & in2; break; //and
               case 14: *p_vystup++ = in1 ^ in2; break; //xor
               case 15: *p_vystup++ = ~(in1 & in2); break; //nand
-                        /*
-                       *
-              case 3: *p_vystup++ = in1 ^ in2; break; //xor
-
-              case 4: *p_vystup++ = ~in1; break;  //not in1
-              case 5: *p_vystup++ = ~in2; break;  //not in2
-
-              */
               default: ;
                  *p_vystup++ = 0xff; //log 1
             }
@@ -208,106 +205,10 @@ inline int fitness2(chromozom p_chrom, int *p_svystup) {
     return vystupy2[maxidx_out-1];
 }
 
-inline int fitness(chromozom p_chrom, int *p_svystup) {
-    int in1,in2,fce;
-    int i,j;
-    int *p_vystup = vystupy;
-    p_vystup += param_in; //posunuti az za hodnoty vstupu
-
-    //Simulace obvodu pro dany stav vstupu
-    // - simulace se provede pro kazde hradlo a vysledky se ulozi do pole vystupy
-    // - hradlo provadi operaci nad dvemi 32b inty, tak jak to sekanina
-    //   vysvetloval v prednaskach
-    //----------------------------------------------------------------------------
-    // FIXME: for vsechny pixely v obrazku
-    // FIXME: tady musim vytvorit tu matici hlavniho pixelu a jeho sousedu
-    //nakopirovani vstupnich dat na vstupy komb. site
-     
-   
-    // FIXME: na zacatek toho pole vystupy musi dat ty vstupni pixely
-
-    // Tyto dva cykly postupne projdou celou siti hradel a protahout tam tu
-    // vstupni hodnotu a pak ve vystupy[30] budes mit tu vyslednou hodnotu
-    // obvodu.
-    for (i=0; i < param_m; i++) {  //vyhodnoceni funkce pro sloupec
-        for (j=0; j < param_n; j++) { //vyhodnoceni funkce pro radky sloupce
-            in1 = vystupy[*p_chrom++];  // vezme se hodnota ze vstupu
-            in2 = vystupy[*p_chrom++];
-            fce = *p_chrom++;
-
-            switch (fce) {
-              // provede se hradlo a vysledek se ulozi do pole vystupy na
-              // prisusny index reprezentujici vystup daneho hradla
-              case 0: *p_vystup++ = in1; break;       //in1
-
-              case 1: *p_vystup++ = in1 & in2; break; //and
-              case 2: *p_vystup++ = in1 | in2; break; //or
-              case 3: *p_vystup++ = in1 ^ in2; break; //xor
-
-              case 4: *p_vystup++ = ~in1; break;  //not in1
-              case 5: *p_vystup++ = ~in2; break;  //not in2
-
-              case 6: *p_vystup++ = in1 & ~in2; break;
-              case 7: *p_vystup++ = ~(in1 & in2); break;
-              case 8: *p_vystup++ = ~(in1 | in2); break;
-              default: ;
-                 *p_vystup++ = 0xffffffff; //log 1
-            }
-        }
-    }
-
-    register int vysl;
-    register int pocok = 0; //pocet shodnych bitu
-
-    //Vyhodnoceni odezvy
-    //----------------------------------------------------------------------------
-    //pomoci 4 nahledu do lookup tabulky
-    for (i=0; i < param_out; i++) {  
-        vysl = (vystupy[*p_chrom++] ^ *p_svystup++);
-        pocok += lookupbit_tab[vysl & 0xff]; //pocet 0 => pocet spravnych
-        vysl = vysl >> 8;
-        pocok += lookupbit_tab[vysl & 0xff];
-        vysl = vysl >> 8;
-        pocok += lookupbit_tab[vysl & 0xff];
-        vysl = vysl >> 8;
-        pocok += lookupbit_tab[vysl & 0xff];
-    }
-
-    /*
-    //pomoci for cyklu
-    vysl = ~(vystupy[*p_chrom++] ^ *p_svystup++); //bit 1 udava spravnou hodnotu
-    for (j=0; j < 32; j++) {
-        pocok += (vysl & 1);
-        vysl = vysl >> 1;
-    }
-    */
-    return pocok;
-}
-
 //-----------------------------------------------------------------------
 //OHODNOCENI CELE POPULACE
 // vstup_komb je to pole tech binarnich cisel pro ktere mas pocitat tu paritu
 //=======================================================================
-inline void ohodnoceni(int vstup_komb[], int minidx, int maxidx, int ignoreidx) {
-    int fit;
-    
-    for (int l=0; l < param_fitev; l++) {
-
-        memcpy(vystupy, vstup_komb, param_in*sizeof(int));
-        vstup_komb += param_in;
-
-        // Ohodnoceni vsech jedincu (obvodu) v populaci
-        //simulace obvodu vsech jedincu populace pro dane vstupy
-        //
-        for (int i=minidx; i < maxidx; i++) {
-            if (i == ignoreidx) continue;
-            fit = fitness((int *) populace[i], vstup_komb);
-            (l==0) ? fitt[i] = fit : fitt[i] += fit;
-        }
-        vstup_komb += param_out; //posun na dalsi vstupni kombinace
-    }
-}
-
 unsigned char **getNextWindow(unsigned char **matrix, int *i, int *j)
 {
   int k;
@@ -323,6 +224,9 @@ unsigned char **getNextWindow(unsigned char **matrix, int *i, int *j)
     return NULL;
   }
 
+  *i = row;
+  *j = col;
+ 
   unsigned char **window = (unsigned char **)malloc(sizeof(unsigned char *) * WIN_ROWS);
   if (window == NULL) {
     perror("malloc");
@@ -336,12 +240,12 @@ unsigned char **getNextWindow(unsigned char **matrix, int *i, int *j)
     }
   }
 
-  window[0][0] = matrix[row-1][col-1];
+  window[0][0] = matrix[row-1][col-1]; 
   window[0][1] = matrix[row-1][col];
   window[0][2] = matrix[row-1][col+1];
 
   window[1][0] = matrix[row][col-1];
-  window[1][1] = matrix[row][col];    // stredovy pixel
+  window[1][1] = matrix[row][col]; 
   window[1][2] = matrix[row][col+1];
 
   window[2][0] = matrix[row+1][col-1];
@@ -362,9 +266,7 @@ unsigned char **getNextWindow(unsigned char **matrix, int *i, int *j)
     assert(false);
   }
 
-  *i = row;
-  *j = col;
-  return window;
+ return window;
 }
 
 
@@ -384,7 +286,6 @@ inline void ohodnoceni2(int vstup_komb[], int minidx, int maxidx, int ignoreidx)
     while ((p_win = getNextWindow(gif_data, &i_index, &j_index)) != NULL) {
       // nakopiruj hodnoty z okna na vstupy filtru (jakoby vystupy z neceho co
       // dodava obrazek)
-      //memcpy(vystupy2, p_win, param_in*sizeof(unsigned char));
       vystupy2[0] = p_win[0][0];
       vystupy2[1] = p_win[0][1];
       vystupy2[2] = p_win[0][2];
@@ -395,12 +296,24 @@ inline void ohodnoceni2(int vstup_komb[], int minidx, int maxidx, int ignoreidx)
       vystupy2[7] = p_win[2][1];
       vystupy2[8] = p_win[2][2];
 
+      /*
+      printf("okno: \n");
+      printf("%d ", p_win[0][0]);
+      printf("%d ", p_win[0][1]);
+      printf("%d \n", p_win[0][2]);
+      printf("%d ", p_win[1][0]);
+      printf("%d ", p_win[1][1]);
+      printf("%d \n", p_win[1][2]);
+      printf("%d ", p_win[2][0]);
+      printf("%d ", p_win[2][1]);
+      printf("%d \n", p_win[2][2]);
+      */
+
+      /* uvolnim okno aby mi postupne nesezralo celou pamet */
       for (int k = 0; k < WIN_ROWS; k++) {
         free(p_win[k]);
       }
       free(p_win);
-
-    //vstup_komb += param_in;
 
       // Ohodnoceni vsech jedincu (obvodu) v populaci
       //simulace obvodu vsech jedincu populace pro dane vstupy
@@ -412,32 +325,26 @@ inline void ohodnoceni2(int vstup_komb[], int minidx, int maxidx, int ignoreidx)
           if (i == ignoreidx) {
             // vypocet fitness se pro nejspeiho v dalsich generaci uplne
             // preskoci a proto tam hned nastavim tu nejvetsi hodnotu 
-            sum[i] = INT_MAX;   
+            //sum[i] = INT_MAX;   
             continue;
           }
           
           // FIXME: fit bude fitness pro dane okno pixelu a ted tu hodnotu
           // musim odecist od hodnoty puvodniho pixelu a potom ji sectu s
           // predchozi - tak mi vznikne suma pro vsechny pixely
-          // v(i,j) - orig_pixel(i,j)
           v = fitness2((int *) populace[i], vstup_komb);
 
           // najednou pocitam sumu pro kazdeho jedince
+          // sum = | v(i,j) - orig_pixel(i,j) |
           sum[i] += abs((int)v - (int)gif_orig[i_index][j_index]);
-          //(l==0) ? fitt[i] = fit : fitt[i] += fit;
       }
-
     }
 
     for (int i=0; i < maxidx; i++) {
       fitt[i] = (1.0/wins_num) * sum[i];
+      //fitt[i] = (1.0/MATRIX_ROWS*MATRIX_COLS) * sum[i];
       //printf("chromozom[%d] ma fitness = %f\n", i, fitt[i]);
     }
-      //vstup_komb += param_out; //posun na dalsi vstupni kombinace
-
-  // FIXME: ted mam udelanou sumu pro fitnes u vsech obvodu a ted to jeste
-  // musim vynasobit tou konstantou a dostanu tak konecnou hodnotu fitness pro
-  // dany obvod.
 }
 
 //-----------------------------------------------------------------------
@@ -505,46 +412,37 @@ int main(int argc, char* argv[])
     printf("original gif img: %s\n", argv[2]);
     printf("velikost pouziteho okna %dx%d\n", WIN_ROWS, WIN_COLS);
 
-    // input file of the filter
+    /* vytvoreni matice, ktera bude obsahovat pixely vstupniho obrazku filtru */
     gif_data = new unsigned char*[MATRIX_ROWS];
     for (i = 0; i < MATRIX_ROWS; ++i) {
       gif_data[i] = new unsigned char[MATRIX_COLS];
     }
-    p_gif_data = *gif_data;
+    /* nacteni vstupniho obrazku do vytvoreni matice */
+    f = fopen(argv[1], "rb");
+    for (i = 0; i < MATRIX_ROWS; i++) {
+      for (j = 0; j < MATRIX_COLS; j++) {
+        c = fgetc(f);
+        gif_data[i][j] = c;
+        //printf("gif_data[%d][%d] read 0x%x (%d)\n", i, j, c, c);
+      }
+    }
+    fclose(f);
 
-
+    /* vytvoreni a nacteni pixelu originalniho obrazku */
     gif_orig = new unsigned char*[MATRIX_ROWS];
     for (i = 0; i < MATRIX_ROWS; ++i) {
       gif_orig[i] = new unsigned char[MATRIX_COLS];
     }
-    p_gif_orig = *gif_orig;
-
-    //init_data(data); //inicializace dat
-
-    f = fopen(argv[1], "rb");
-    for (i = 0; (c = fgetc(f)) != EOF; i++) {
-      //printf("byte[%d]: 0.%x\n", i, c);
-      *(p_gif_data+i) = (unsigned char) c;
-    }
-
-    /* vypis raw souboru, ktery pujde na vstup filtru jako matice */
-    /*
-    for (i = 0; i < MATRIX_ROWS; i++) {
-      printf("row%d: ", i);
-      for (j = 0; j < MATRIX_COLS; j++) {
-        printf("%d ", gif_data[i][j]);
-      }
-      putchar('\n');
-    }
-    */
-
-
-    // read the original file
     f = fopen(argv[2], "rb");
-    for (i = 0; (c = fgetc(f)) != EOF; i++) {
-      //printf("read byte[%d]: 0.%x\n", i, c);
-      *(p_gif_orig+i) = (unsigned char) c;
+    for (i = 0; i < MATRIX_ROWS; i++) {
+      for (j = 0; j < MATRIX_COLS; j++) {
+        c = fgetc(f);
+        gif_orig[i][j] = c;
+        //printf("gif_orig[%d][%d] read 0x%x (%d)\n", i, j, c, c);
+      }
     }
+    fclose(f);
+ 
  
     srand((unsigned) time(NULL)); //inicializace pseudonahodneho generatoru
 
@@ -554,7 +452,7 @@ int main(int argc, char* argv[])
     param_fitev = DATASIZE / (param_in+param_out); //Spocitani poctu pruchodu pro ohodnoceni
     // FIXME: nejlepsi fitness bude mit hodnotu 0
 
-    maxfitness = 0; // nejlepsi fitness ktere mohu dosahnout
+    maxfitness = 0; // nejlepsi fitness ktere mohu pro MDPP dosahnout
 
     //maxfitness = param_fitev*param_out*32;         //Vypocet max. fitness
     printf("maxfitnes: %d\n", maxfitness);
@@ -661,8 +559,9 @@ int main(int argc, char* argv[])
         //Ohodnoceni pocatecni populace
         //-----------------------------------------------------------------------
         //bestfit = 0; 
-        bestfit = INT_MAX;   // na zacatku nastavim bestfitness na tu
-                                // nejhorsi fitness a cim mensi fitness najdu time leps
+        /* na zacatku nastavim bestfitness na tu // nejhorsi fitness a cim mensi
+         * fitness najdu time lepe */
+        bestfit = INT_MAX;   
         bestfit_idx = -1;
         ohodnoceni2(data, 0, param_populace, -1);
         for (int i=0; i < param_populace; i++) { //nalezeni nejlepsiho jedince
@@ -689,13 +588,6 @@ int main(int argc, char* argv[])
         maxfitpop = 0;
         while (param_generaci++ < PARAM_GENERATIONS) {
 
-				/*
-            if (param_generaci % 100 == 0) {
-              printf("gen: %d\n", param_generaci); fflush(stdout);
-            }
-			*/
-            //printf("generace: %d\n", param_generaci);
-            //-----------------------------------------------------------------------
             //Periodicky vypis chromozomu populace
             //-----------------------------------------------------------------------
             #ifdef PERIODIC_LOG
