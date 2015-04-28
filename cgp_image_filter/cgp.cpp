@@ -30,7 +30,9 @@ unsigned char *p_gif_orig;
 typedef int *chromozom;                //dynamicke pole int, velikost dana m*n*(vstupu bloku+vystupu bloku) + vystupu komb
 chromozom *populace[POPULACE_MAX];   //pole ukazatelu na chromozomy jedincu populace
 double fitt[POPULACE_MAX];              //fitness jedincu populace
+double fitt_psnr[POPULACE_MAX];              //fitness jedincu populace
 int uzitobloku(int *p_chrom);
+bool psnr = false;
 
 double bestfit;
 int bestfit_idx;   //nejlepsi fittnes, index jedince v populaci
@@ -98,8 +100,9 @@ void print_chrom(FILE *fout, chromozom p_chrom) {
 void print_xls(FILE *xlsfil) {
   fprintf(xlsfil, "%d\t%f\t%d\t%d\t\t",param_generaci,bestfit,fitpop,bestblk);
   for (int i=0; i < param_populace;  i++) {
-      fprintf(xlsfil, "%f\t",fitt[i]);
-  } fprintf(xlsfil, "\n");
+      (psnr) ? (fprintf(xlsfil, "%f\t",fitt_psnr[i])) : (fprintf(xlsfil, "%f\t",fitt[i]));
+  } 
+  fprintf(xlsfil, "\n");
 }
 
 //-----------------------------------------------------------------------
@@ -240,12 +243,12 @@ unsigned char **getNextWindow(unsigned char **matrix, int *i, int *j)
     }
   }
 
-  window[0][0] = matrix[row-1][col-1]; 
+  window[0][0] = matrix[row-1][col-1];
   window[0][1] = matrix[row-1][col];
   window[0][2] = matrix[row-1][col+1];
 
   window[1][0] = matrix[row][col-1];
-  window[1][1] = matrix[row][col]; 
+  window[1][1] = matrix[row][col];
   window[1][2] = matrix[row][col+1];
 
   window[2][0] = matrix[row+1][col-1];
@@ -276,7 +279,7 @@ inline void ohodnoceni2(int vstup_komb[], int minidx, int maxidx, int ignoreidx)
   int i, j;
   int i_index, j_index;
   int sum[POPULACE_MAX] = {};
-  //int sum[POPULACE_MAX] = {[POPULACE_MAX-1] = 0};
+  int sum_psnr[POPULACE_MAX] = {};
 
   // FIXME: param_fitev rika kolikrat je treba projit obvodem, abych dostal
   // fitness danoho obvodu, takže to pro me bude pocet pixelu obrazku, ale
@@ -336,12 +339,26 @@ inline void ohodnoceni2(int vstup_komb[], int minidx, int maxidx, int ignoreidx)
 
           // najednou pocitam sumu pro kazdeho jedince
           // sum = | v(i,j) - orig_pixel(i,j) |
-          sum[i] += abs((int)v - (int)gif_orig[i_index][j_index]);
+          if (psnr) {
+            sum_psnr[i] += pow((int)gif_orig[i_index][j_index] - (int)v, 2);
+          } else {
+            sum[i] += abs((int)v - (int)gif_orig[i_index][j_index]);
+          }
       }
     }
 
     for (int i=0; i < maxidx; i++) {
-      fitt[i] = (1.0/wins_num) * sum[i];
+      if (psnr) {
+        if (sum_psnr[i] != 0) {
+          // pro nejlepsiho predchoziho jedince se nepocita nova suma, takze
+          // sum_psnr[i] == 0, necham mu tedy predchozi fitness
+          fitt_psnr[i] = 10 * log10(pow(255.0, 2) / (1.0/(255.0*255.0))*sum_psnr[i]);
+        }
+
+        //printf("chromozom[%d] ma fitness = %f\n", i, fitt_psnr[i]);
+      } else {
+        fitt[i] = (1.0/wins_num) * sum[i];
+      }
       //fitt[i] = (1.0/MATRIX_ROWS*MATRIX_COLS) * sum[i];
       //printf("chromozom[%d] ma fitness = %f\n", i, fitt[i]);
     }
@@ -389,10 +406,15 @@ int main(int argc, char* argv[])
     int i, j, c;
     int parentidx;
     
-    if (argc < 4) {
-      printf("Usage: %s noise_raw_gif orig_raw_gif run\n", argv[0]);
+    if (argc < 5) {
+      printf("Usage: %s noise_raw_gif orig_raw_gif run [psnr,mdpp]\n", argv[0]);
       return EXIT_FAILURE;
     }
+
+    if (strcmp(argv[4], "psnr") == 0) {
+      psnr = true;
+    } 
+    //else if (strcmp(argv[4], "mspp") == 0) {
 
     logfname = "log";
     if ((argc == 2) && (argv[1] != "")) 
@@ -452,7 +474,11 @@ int main(int argc, char* argv[])
     param_fitev = DATASIZE / (param_in+param_out); //Spocitani poctu pruchodu pro ohodnoceni
     // FIXME: nejlepsi fitness bude mit hodnotu 0
 
-    maxfitness = 0; // nejlepsi fitness ktere mohu pro MDPP dosahnout
+    if (psnr) {
+      maxfitness = INT_MAX;   // ???
+    } else {
+      maxfitness = 0; // nejlepsi fitness ktere mohu pro MDPP dosahnout
+    }
 
     //maxfitness = param_fitev*param_out*32;         //Vypocet max. fitness
     printf("maxfitnes: %d\n", maxfitness);
@@ -553,11 +579,21 @@ int main(int argc, char* argv[])
         //bestfit = 0; 
         /* na zacatku nastavim bestfitness na tu // nejhorsi fitness a cim mensi
          * fitness najdu time lepe */
+        if (psnr) {
+          bestfit = 0;
+        } else {
         bestfit = INT_MAX;   
+        }
+
         bestfit_idx = -1;
         ohodnoceni2(data, 0, param_populace, -1);
         for (int i=0; i < param_populace; i++) { //nalezeni nejlepsiho jedince
-            if (fitt[i] < bestfit) {  // FIXME: <= ??? byla tam > ...
+            if (psnr) {
+              if (fitt_psnr[i] >= bestfit) {
+                 bestfit = fitt_psnr[i];
+                 bestfit_idx = i;
+              }
+            } else if (fitt[i] < bestfit) {  // FIXME: <= ??? byla tam > ...
                bestfit = fitt[i];
                bestfit_idx = i;
             }
@@ -586,7 +622,8 @@ int main(int argc, char* argv[])
             if (param_generaci % PERIODICLOGG == 0) {
                printf("Generation: %d\n",param_generaci);
                for(int j=0; j<param_populace; j++) {
-                  printf("{%d, %d}",fitt[j],uzitobloku((int *)populace[j]));
+                  printf("{%d, %d}",(psnr) ? fitt_psnr[i] : fitt[j],
+                      uzitobloku((int *)populace[j]));
                   print_chrom(stdout,(chromozom)populace[j]);
                }
             }
@@ -621,11 +658,11 @@ int main(int argc, char* argv[])
             fitpop = 0;
             log = false;
             for (int i=0; i < param_populace; i++) { 
-                fitpop += fitt[i];
+                fitpop += (psnr) ? fitt_psnr[i] : fitt[i];
                 
                 if (i == parentidx) continue; //preskocime rodice
 
-                if (fitt[i] == maxfitness) {
+                if (((psnr) ? fitt_psnr[i] : fitt[i]) == maxfitness) {
                    //optimalizace na poc. bloku obvodu
 
                    blk = uzitobloku((chromozom) populace[i]);
@@ -637,19 +674,19 @@ int main(int argc, char* argv[])
                       }
 
                       bestfit_idx = i;
-                      bestfit = fitt[i];
+                      bestfit = (psnr) ? fitt_psnr[i] : fitt[i];
                       bestblk = blk;
                    }
-                } else if (fitt[i] <= bestfit) {  // FIXME: tady bylo predtim >=, ale my hledame mensi
+                } else if ((psnr) ? (fitt_psnr[i] >= bestfit) : fitt[i] <= bestfit) {  // FIXME: tady bylo predtim >=, ale my hledame mensi
                    //nalezen lepsi nebo stejne dobry jedinec jako byl jeho rodic
 
-                   if (fitt[i] < bestfit) {   // FIXME: tady bylo >
-                      printf("Generation:%d\t\tFittness: %f/%d\n",param_generaci,fitt[i],maxfitness); fflush(stdout);
+                   if ((psnr) ? (fitt_psnr[i] > bestfit) : (fitt[i] < bestfit)) {   // FIXME: tady bylo >
+                      printf("Generation:%d\t\tFittness: %f/%d\n",param_generaci,(psnr) ? fitt_psnr[i] : fitt[i],maxfitness); fflush(stdout);
                       log = true;
                    }
 
                    bestfit_idx = i;
-                   bestfit = fitt[i];
+                   bestfit = (psnr) ? fitt_psnr[i] : fitt[i];
                    bestblk = ARRSIZE;
                 }
             }
