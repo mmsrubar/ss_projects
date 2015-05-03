@@ -1,0 +1,10 @@
+set autoscale
+set key left box
+set style data points
+set autoscale                                           
+set terminal epslatex size 13.29cm,8.65cm color colortext
+set output 'introduction.tex'
+set xlabel '$n$'
+set ylabel '$Cas [ns]$'
+set format '$%g$'
+plot  "performance.dat" with linespoints

@@ -1,0 +1,95 @@
+[warn] Epoll ADD(4) on fd 2 failed.  Old events were 0; read change was 0 (none); write change was 1 (add): Operation not permitted
+[localhost:3587] *** An error occurred in MPI_Send
+[localhost:3587] *** reported by process [3733913601,1]
+[localhost:3587] *** on communicator MPI_COMM_WORLD
+[localhost:3587] *** MPI_ERR_RANK: invalid rank
+[localhost:3587] *** MPI_ERRORS_ARE_FATAL (processes in this communicator will now abort,
+[localhost:3587] ***    and potentially your MPI job)
+[warn] Epoll ADD(4) on fd 1 failed.  Old events were 0; read change was 0 (none); write change was 1 (add): Operation not permitted
+[localhost.localdomain:03584] 2 more processes have sent help message help-mpi-errors.txt / mpi_errors_are_fatal
+[localhost.localdomain:03584] Set MCA parameter "orte_base_help_aggregate" to 0 to see all help / error messages
+2:2
+CPU2 waiting for start
+CPU1 waiting for start
+CPU3 waiting for start
+CPU0 m: 2
+CPU0 n: 3
+CPU0 k: 2
+file: CPU1 m: 2
+CPU1 n: 3
+CPU1 k: 2
+CPU 1 has input buffer
+mat1
+send: 3 to cpu: 0
+send: 2 to cpu: 0
+send: 1 to cpu: 0
+send: 6 to cpu: 2
+send: 5 to cpu: 2
+send: 4 to cpu: 2
+file: mat2
+send: 5 to cpu: 0
+send: 3 to cpu: 0
+send: 1 to cpu: 0
+send: 6 to cpu: 1
+send: 4 to cpu: 1
+CPU2 m: 2
+CPU2 n: 3
+CPU2 k: 2
+CPU 2 has input buffer
+CPU2 received val a 6 from buf[0
+send: 2 to cpu: 1
+CPU0 waiting for start
+CPU0 m: 2
+CPU0 n: 3
+CPU0 k: 2
+CPU 0 has input buffer
+CPU0 received val a 3 from buf[0
+CPU0 received 5 from 0
+CPU0 3*5 c now: 15
+CPU0 sending 3 to 1
+CPU0 sending 5 to 2
+CPUCPU2 received 5 from 0
+CPU2 6*5 c now: 30
+CPU2 sending 6 to 3
+CPU2 received val a 5 from buf[1
+0 received val a 2 from buf[1
+CPU0 received 3 from 0
+CPU0 2*3 c now: 21
+CPU0 sending 2 to 1
+CPU0 sending 3 to 2
+CPUCPU2 received 3 from 0
+CPU2 5*3 c now: 45
+CPU2 sending 5 to 3
+CPU2 received val a 4 from buf[2
+0 received val a 1 from buf[2
+CPU0 received 1 from 0
+CPU0 1*1 c now: CPU1 received 3 from 0
+CPU1 received val b 6 from buf[0
+CPU1 3*6 c now: 18
+CPU1 sending 6 to 3
+CPU1 received 2 from 0
+CPU1 received val b 4 from buf[1
+CPU1 2*4 c now: 26
+CPU1 sending 4 to 3
+22
+CPU0 sending 1 to 1
+CPU1 received 1 from CPU0
+CPU1 received val b 2 from buf[2
+CPU1 1*2 c now: 28
+CPU1 sending 2 to 3
+0 sending 1 to 2
+CPU2 received 1 from 0
+CPU2 4*1 c now: 49
+CPU2 sending 4 to 3
+CPU3 m: 2
+CPU3 n: 3
+CPU3 k: 2
+CPU3 received 6 from 2
+CPU3 received 6 from 1
+CPU3 6*6 c now: 36
+CPU3 received 5 from 2
+CPU3 received 4 from 1
+CPU3 5*4 c now: 56
+CPU3 received 4 from 2
+CPU3 received 2 from 1
+CPU3 4*2 c now: 64
