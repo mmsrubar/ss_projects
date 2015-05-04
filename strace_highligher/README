@@ -1,0 +1,6 @@
+strace highligner script
+========================
+This is very simple bash script that can be used to colorize an output of the
+strace utility and convert it into the HTML format. The example dir contains
+trace.strace which is output of the strace run on binary compiled from test.c
+and trace.html is output of the hltrace script.
