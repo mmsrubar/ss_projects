@@ -1,26 +1,26 @@
 #!/bin/sh
 #
-#	Project:	  strace highlighter
+# Project:    strace highlighter
 # Seminar:    Operating Systems (Brno University of Technology - FIT)
-#	Author:		  Michal Srubar, xsruba03@stud.fit.vutbr.cz
-#	Date:		    Mon May  4 21:39:52 CEST 2011
-#	
+# Author:     Michal Srubar, xsruba03@stud.fit.vutbr.cz
+# Date:       Mon May  4 21:39:52 CEST 2011
+# 
 # Description:
 # This script can colorize and convert output of the strace utility to the HTML
 # format.
-#	
-#	What is highlighted?:
-#	- system calls are redesign to hyper-text link to syscall man page
-#	- pid (process id)
-#	- relative timestamp
-#	- systemCall return values
-#	- constants
-#	- strings literals
-#	note:
-#	- all html special chars as >, <, &, are redesign to &lt;, &gt;, &amp;
+# 
+# What is highlighted?:
+# - system calls are redesign to hyper-text link to syscall man page
+# - pid (process id)
+# - relative timestamp
+# - systemCall return values
+# - constants
+# - strings literals
+# note:
+# - all html special chars as >, <, &, are redesign to &lt;, &gt;, &amp;
 
 usage() {
-	printf "\
+  printf "\
 hltrace - strace highlighter.\n
 Usage: hltrace [options] <trace.strace >trace.html\n
 options:
@@ -29,7 +29,7 @@ options:
 }
 
 begin() {
-	printf "\
+  printf "\
 <html>
 <style>
 .pid    { color:darkred; }
@@ -45,23 +45,23 @@ a:hover { text-decoration: underline; }
 }
 
 end() {
-	printf "</pre></body></html>"
+  printf "</pre></body></html>"
 }
 
 while getopts ":hs:" opt; do
-	case $opt in
-		h)	usage; exit 1 ;;
-		s)	sflag=1
-			syscall="$OPTARG" ;;
-		\?)	usage; exit 1 ;;	
-		:)	printf "ERROR: you need to specify the system call.\n" >&2; exit 1 ;;
-	esac
+  case $opt in
+    h)  usage; exit 1 ;;
+    s)  sflag=1
+        syscall="$OPTARG" ;;
+    \?) usage; exit 1 ;;  
+    :)  printf "ERROR: you need to specify the system call.\n" >&2; exit 1 ;;
+  esac
 done
 shift $(($OPTIND-1))
 
 if [ ! -z $1 ]; then
-	usage
-	exit 1
+  usage
+  exit 1
 fi
 
 # used regular expresions
@@ -87,7 +87,7 @@ fi
 #
 # constants
 #-e :loop -e h -e "s/([[|[&({= ])([A-Z][A-Z0-9_]+)([]|&(),} ])/\1$tag class=\"const\">\2<\/span>\3/g" -e tloop \
-#	
+# 
 # numbers
 #-e "s/ = ([-x0-9abcdefABCDEF]+)/ = $tag class=\"number\">\1$Etag/g" \
 #-e "s/([( ])([-x0-9abcdefABCDEF]+)([,)])/\1$tag class=\"number\">\2$Etag\3/g" \
