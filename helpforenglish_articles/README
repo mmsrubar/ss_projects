@@ -1,0 +1,16 @@
+Pomoci tohoto jednoducheho skriptu muzes ziskat vsechny clanky ze serveru
+www.h4e.cz podle zadane urovne. Z urovni je na vyber:
+
+  1 = Starter
+  2 = Elementary
+  3 = Pre-intermediate
+  4 = Intermediate
+  5 = Upper-intermediate
+  6 = Advanced
+
+Priklad pouziti pro ziskani vsech clanku z urovne Upper-intermediate:
+
+$ python h4e_articles.py 5 > upper-intermediate.html
+
+Vystupem bude soubor upper-intermediate.html, který si můžeš prohlédnout v
+prohlížeči.
