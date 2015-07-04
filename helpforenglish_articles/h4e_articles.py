@@ -50,7 +50,10 @@ if args.verbose:
 	print u"Vybraná úroveň: "+args.uroven+" ("+level+")"
 
 print "<html>"
-print "<head><title>h4e.cz - starter articles</title></head>"
+print "<head>"
+print "\t<title>h4e.cz - starter articles</title>"
+print "\t<meta charset=\"UTF-8\">"
+print "</head>"
 print "<body>"
 print "<h1>Help For English: "+str_level+"</h1>"
 print "<table border=1px>"
@@ -81,8 +84,8 @@ for i in range(fromm,to,step):
 
 		print "<tr>"
 		print "<td>"+str(counter+1)+".</td>"
-		print "<td><a href=\""+prefix+link+"\">"+name+"</a></td>"
-		print "<td><a href=\""+pageLink+str(i)+"\">"+str(i)+"</a></td>",
+		print "<td><a target=\"_blank\" href=\""+prefix+link+"\">"+name+"</a></td>"
+		print "<td><a target=\"_blank\" href=\""+pageLink+str(i)+"\">"+str(i)+"</a></td>",
 		print "</tr>"
 
 		counter += 1
