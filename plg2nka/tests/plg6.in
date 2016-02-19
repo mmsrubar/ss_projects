@@ -1,9 +1,0 @@
-S,A,B
-a,b,c
-S
-S->abcA
-S->aB
-A->B
-A->#
-B->cA
-B->bbc

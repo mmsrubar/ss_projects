@@ -1,9 +1,0 @@
-A,D,E,C
-a,b
-A
-A->D
-A->#
-A->E
-D->E
-E->abC
-C->A
